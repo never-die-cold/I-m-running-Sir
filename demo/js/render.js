@@ -38,8 +38,16 @@ function draw(){
   drawLandmarks();
   drawCheckpoints();
   drawNav();
+  drawPfx();
   if(session.mode==="battle") drawBattle();
   drawPlayer();
+
+  /* 天色 / 天气罩 + 雨 */
+  const tint=ENV.skyTint();
+  if(tint.overlay){ ctx.fillStyle=tint.overlay; ctx.fillRect(0,0,W,H); }
+  if(ENV.isCloudy()){ ctx.fillStyle="rgba(130,140,150,.10)"; ctx.fillRect(0,0,W,H); }
+  if(ENV.isRain()){ ctx.fillStyle="rgba(50,70,100,.16)"; ctx.fillRect(0,0,W,H); drawRainFx(); }
+  drawMinimap();
 }
 
 function drawNav(){
@@ -125,7 +133,7 @@ function drawLandmarks(){
 }
 
 function drawGroundGrid(L,R,Bo,T,z){
-  ctx.fillStyle="#11150f"; ctx.fillRect(0,0,W,H);
+  ctx.fillStyle=ENV.skyTint().ground; ctx.fillRect(0,0,W,H);
   const step = z<0.3?200 : z<0.7?100 : 50;
   if(step*z < 22) return;
   ctx.strokeStyle="rgba(255,255,255,.030)"; ctx.lineWidth=1; ctx.beginPath();
@@ -160,6 +168,14 @@ function drawBuilding(b){
   ctx.fillRect(rx,ry,w,Math.max(1,h*0.14));
   ctx.strokeStyle=`rgba(0,0,0,.45)`; ctx.lineWidth=1;
   ctx.strokeRect(rx+.5,ry+.5,w-1,h-1);
+
+  /* 夜间窗户灯（确定性伪随机亮窗） */
+  if(ENV.isNight() && w>14 && h>10){
+    ctx.fillStyle="rgba(255,214,120,.75)";
+    for(let yy=ry+4; yy<ry+h-4; yy+=7)
+      for(let xx=rx+4; xx<rx+w-5; xx+=7)
+        if(((xx*13+yy*7)|0)%5<2) ctx.fillRect(xx,yy,2.2,2.6);
+  }
 
   if(w>62 && h>18){
     ctx.fillStyle="rgba(235,242,240,.72)";
@@ -276,6 +292,15 @@ function drawPlayer(){
   g.addColorStop(0,"rgba(249,198,58,.42)"); g.addColorStop(1,"rgba(249,198,58,0)");
   ctx.fillStyle=g; ctx.beginPath(); ctx.arc(x,y,34,0,7); ctx.fill();
 
+  /* 夜间车头灯锥形光 */
+  if(ENV.isNight()){
+    const a=Math.atan2(-dir.y,dir.x);
+    const g2=ctx.createRadialGradient(x,y,4,x,y,92);
+    g2.addColorStop(0,"rgba(255,240,190,.30)"); g2.addColorStop(1,"rgba(255,240,190,0)");
+    ctx.fillStyle=g2;
+    ctx.beginPath(); ctx.moveTo(x,y); ctx.arc(x,y,92,a-0.42,a+0.42); ctx.closePath(); ctx.fill();
+  }
+
   ctx.strokeStyle="rgba(249,198,58,.35)"; ctx.lineWidth=1.5;
   ctx.beginPath(); ctx.arc(x,y,13,0,7); ctx.stroke();
 
@@ -300,5 +325,97 @@ function drawJoystick(){
   ctx.beginPath(); ctx.arc(ox,oy,R*0.45,0,7); ctx.stroke();
   ctx.fillStyle = (joy.x||joy.y)?"rgba(249,198,58,.8)":"rgba(255,255,255,.32)";
   ctx.beginPath(); ctx.arc(ox+joy.x*R, oy-joy.y*R, R*0.30, 0, 7); ctx.fill();
+  ctx.restore();
+}
+
+/* ============================================================
+   粒子（跑步尘土 / 彩带）与雨（屏幕空间）
+   ============================================================ */
+const PFX=[];
+const CONF_COLORS=["#f9c63a","#3fd6ff","#71e88a","#e858c8","#ff8a5a"];
+function spawnDust(x,y){
+  if(PFX.length>=240) return;
+  PFX.push({x,y,vx:(Math.random()-.5)*2,vy:(Math.random()-.5)*2,age:0,dur:.5,
+            r:2+Math.random()*2.4,color:"#9a927e",g:0});
+}
+function spawnConfetti(x,y){
+  for(let i=0;i<28&&PFX.length<280;i++){
+    const a=Math.random()*Math.PI*2, sp=3+Math.random()*9;
+    PFX.push({x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,age:0,dur:1.0,
+              r:2.6,color:CONF_COLORS[i%CONF_COLORS.length],g:10});
+  }
+}
+function updatePfx(dt){
+  for(let i=PFX.length-1;i>=0;i--){
+    const p=PFX[i]; p.age+=dt;
+    if(p.age>=p.dur){ PFX.splice(i,1); continue; }
+    p.x+=p.vx*dt; p.y+=p.vy*dt;
+    if(p.g) p.vy-=p.g*dt;
+  }
+}
+function drawPfx(){
+  for(const p of PFX){
+    const [x,y]=w2s(p.x,p.y);
+    const t=p.age/p.dur;
+    ctx.globalAlpha=1-t;
+    ctx.fillStyle=p.color;
+    ctx.beginPath(); ctx.arc(x,y,Math.max(1,p.r*cam.zoom*(p.g?1:(1+t))),0,7); ctx.fill();
+  }
+  ctx.globalAlpha=1;
+}
+
+const RAIN=[];
+function updateRainFx(dt){
+  if(!ENV.isRain()){ if(RAIN.length) RAIN.length=0; return; }
+  while(RAIN.length<90) RAIN.push({x:Math.random()*W,y:Math.random()*H,
+    v:520+Math.random()*260,l:9+Math.random()*9});
+  for(const r of RAIN){
+    r.y+=r.v*dt; r.x-=r.v*0.18*dt;
+    if(r.y>H+20){ r.y=-20; r.x=Math.random()*(W+120); }
+    if(r.x<-20) r.x+=W+40;
+  }
+}
+function drawRainFx(){
+  ctx.strokeStyle="rgba(160,190,230,.45)"; ctx.lineWidth=1;
+  ctx.beginPath();
+  for(const r of RAIN){ ctx.moveTo(r.x,r.y); ctx.lineTo(r.x+r.l*0.18,r.y-r.l); }
+  ctx.stroke();
+}
+function updateEnvFx(dt){ updatePfx(dt); updateRainFx(dt); }
+
+/* ============================================================
+   小地图（右下角：主路 / 建筑 / 打卡点 / 敌人 / 玩家 / 视野框）
+   ============================================================ */
+function drawMinimap(){
+  const mw=170, mh=124, mx=W-mw-12, my=H-mh-58;
+  const b=CAMPUS.bounds;
+  const s=Math.min(mw/(b.maxX-b.minX), mh/(b.maxY-b.minY));
+  const ox=mx+(mw-(b.maxX-b.minX)*s)/2, oy=my+(mh-(b.maxY-b.minY)*s)/2;
+  const m2x=x=>ox+(x-b.minX)*s, m2y=y=>oy+(b.maxY-y)*s;
+  ctx.save();
+  ctx.fillStyle="rgba(4,7,9,.72)"; ctx.strokeStyle="rgba(63,214,255,.35)"; ctx.lineWidth=1;
+  ctx.fillRect(mx,my,mw,mh); ctx.strokeRect(mx+.5,my+.5,mw-1,mh-1);
+  ctx.strokeStyle="rgba(249,198,58,.55)"; ctx.beginPath();
+  CAMPUS.mainRoute.pts.forEach((p,i)=>{
+    const X=m2x(p.x),Y=m2y(p.y); i?ctx.lineTo(X,Y):ctx.moveTo(X,Y);
+  });
+  ctx.stroke();
+  ctx.fillStyle="rgba(160,170,180,.5)";
+  for(const bd of CAMPUS.buildings)
+    ctx.fillRect(m2x(bd.c.x-bd.s.x/2), m2y(bd.c.y+bd.s.y/2),
+                 Math.max(1.5,bd.s.x*s), Math.max(1.5,bd.s.y*s));
+  for(const cp of session.checkpoints){
+    ctx.fillStyle=cp.cleared?"rgba(120,130,126,.6)":"#3fd6ff";
+    ctx.beginPath(); ctx.arc(m2x(cp.localMeters.x),m2y(cp.localMeters.y),2.2,0,7); ctx.fill();
+  }
+  if(session.mode==="battle")
+    for(const e of BATTLE.enemies){
+      ctx.fillStyle="#ff6b5a"; ctx.fillRect(m2x(e.x)-1.5,m2y(e.y)-1.5,3,3);
+    }
+  ctx.fillStyle="#f9c63a";
+  ctx.beginPath(); ctx.arc(m2x(session.worldPos.x),m2y(session.worldPos.y),2.6,0,7); ctx.fill();
+  ctx.strokeStyle="rgba(255,255,255,.25)";
+  ctx.strokeRect(m2x(cam.x-W/2/cam.zoom), m2y(cam.y+H/2/cam.zoom),
+                 W/cam.zoom*s, H/cam.zoom*s);
   ctx.restore();
 }

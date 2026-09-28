@@ -296,6 +296,45 @@ const test = `
     return !!b && b.distM === 3500 && b.kills === 7 && b.wave === 2;
   })());
 
+  /* ---- 昼夜 / 天气 / 音效 / 粒子 ---- */
+  ENV.reset(77);
+  const min0 = ENV.minutes;
+  ENV.tick(1.0, 1);
+  check("env clock advances (1s -> 1min at 1x)", Math.abs(ENV.minutes - min0 - 1) < 1e-6);
+  ENV.minutes = 12 * 60;
+  check("12:00 is daytime", ENV.isNight() === false);
+  ENV.minutes = 21 * 60;
+  check("21:00 is night", ENV.isNight() === true);
+  check("clock text format", /^\\d{2}:\\d{2}$/.test(ENV.clockText()));
+  ENV.reset(77);
+  ENV.rollWeather();
+  check("weather rolls to valid state", ["sunny", "cloudy", "rain"].includes(ENV.weather));
+  check("sfx safe headless & mute persisted", (() => {
+    Sfx.play("checkpoint"); Sfx.play("ach");
+    const m0 = Sfx.muted;
+    const m1 = Sfx.toggle();
+    const saved = Store.read("muted", null);
+    Sfx.toggle();
+    return typeof m0 === "boolean" && m1 !== m0 && saved === m1;
+  })());
+  check("particles capped and expire", (() => {
+    for (let i = 0; i < 300; i++) spawnDust(0, 0);
+    const dustOk = PFX.length <= 240;
+    for (let i = 0; i < 300; i++) spawnConfetti(0, 0);
+    const confOk = PFX.length <= 280;
+    updatePfx(2);
+    return dustOk && confOk && PFX.length === 0;
+  })());
+  check("night/rain run achievements", (() => {
+    Progress.finishRun({ recordedDist: 0, duration: 0, campus: CAMPUS, mode: "free" }, null);
+    const mk = (dur) => ({ recordedDist: 10, duration: dur, checkpoints: [], campus: CAMPUS,
+      mode: "free", landmarksFound: [], sprinting: false });
+    const envN = { isNight: () => true, isRain: () => false };
+    Progress.observe(mk(0), { kills: 0, wave: 0, level: 1 }, envN);
+    Progress.observe(mk(70), { kills: 0, wave: 0, level: 1 }, envN);
+    return Progress.has("night_owl") && !Progress.has("rain_runner");
+  })());
+
   /* 恢复默认状态 */
   session.setMode("checkpoint"); resetRun();
 

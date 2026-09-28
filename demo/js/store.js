@@ -38,13 +38,15 @@ const ACH_DEFS = [
   { id:"first_kill",    n:"首猎",       d:"战斗模式完成首次击杀" },
   { id:"kill50",        n:"战神",       d:"累计击杀 50 名敌人" },
   { id:"wave5",         n:"破晓",       d:"战斗中撑到第 5 波（迎战首个 BOSS）" },
-  { id:"lvl5",          n:"觉醒",       d:"单局内升至 Lv.5" }
+  { id:"lvl5",          n:"觉醒",       d:"单局内升至 Lv.5" },
+  { id:"night_owl",     n:"夜猫子",     d:"夜间累计奔跑 60 秒" },
+  { id:"rain_runner",   n:"雨中曲",     d:"雨中累计奔跑 60 秒" }
 ];
 
 const Progress = {
   data: null,
   onToast: null,          // ui.js 注入 (text, kind)
-  _lastDur: -1, _lastDist: -1, _lastKills: -1, _sprint: 0, _lastSaveMs: 0,
+  _lastDur: -1, _lastDist: -1, _lastKills: -1, _sprint: 0, _lastSaveMs: 0, _night: 0, _rain: 0,
 
   load() {
     this.data = Store.read("progress", { ach: [], totalDistM: 0, totalKills: 0, best: {} });
@@ -64,10 +66,12 @@ const Progress = {
     return true;
   },
 
-  /* 每帧观察：里程/击杀增量 + 单局内状态成就 */
-  observe(session, battle) {
+  /* 每帧观察：里程/击杀增量 + 单局内状态成就；env 提供昼夜/天气（可省略） */
+  observe(session, battle, env) {
+    env = env || { isNight: () => false, isRain: () => false };
     const d = session.recordedDist, k = battle ? battle.kills : 0, dur = session.duration;
     if (this._lastDur < 0) { this._lastDur = dur; this._lastDist = d; this._lastKills = k; }
+    const ddur = Math.max(0, dur - this._lastDur);
     if (d > this._lastDist) this.data.totalDistM += (d - this._lastDist);
     this._lastDist = d;
     if (k > this._lastKills) {
@@ -75,13 +79,17 @@ const Progress = {
       if (this._lastKills === 0 && k > 0) this.unlock("first_kill");
     }
     this._lastKills = k;
-    if (session.sprinting) this._sprint += Math.max(0, dur - this._lastDur);
+    if (session.sprinting) this._sprint += ddur;
+    if (env.isNight()) this._night += ddur;
+    if (env.isRain()) this._rain += ddur;
     this._lastDur = dur;
 
     if (this.data.totalDistM >= 5000) this.unlock("km5");
     if (this.data.totalDistM >= 21097.5) this.unlock("km21");
     if (this.data.totalKills >= 50) this.unlock("kill50");
     if (this._sprint >= 30) this.unlock("sprint30");
+    if (this._night >= 60) this.unlock("night_owl");
+    if (this._rain >= 60) this.unlock("rain_runner");
 
     const cleared = session.checkpoints.filter(c => c.cleared).length;
     if (cleared > 0) this.unlock("first_cp");

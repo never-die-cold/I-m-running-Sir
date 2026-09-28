@@ -29,7 +29,24 @@ function _nextToast(){
     _nextToast();
   },3100);
 }
-Progress.onToast=(text,kind)=>showToast(text,kind);
+Progress.onToast=(text,kind)=>{ showToast(text,kind); Sfx.play(kind==="rec"?"record":"ach"); };
+
+/* 打卡/巡礼发现的音效与彩带（按帧差分触发） */
+let _lastCleared=0, _lastLm=0;
+function observePickups(session){
+  const cleared=session.checkpoints.filter(c=>c.cleared).length;
+  if(cleared>_lastCleared){
+    Sfx.play("checkpoint");
+    spawnConfetti(session.worldPos.x, session.worldPos.y);
+  }
+  _lastCleared=cleared;
+  const lm=session.landmarksFound?session.landmarksFound.length:0;
+  if(lm>_lastLm){
+    Sfx.play("checkpoint");
+    spawnConfetti(session.worldPos.x, session.worldPos.y);
+  }
+  _lastLm=lm;
+}
 
 function fmtPace(sec){
   if(!sec||!isFinite(sec)||sec<=0) return "--'--\"";
@@ -114,6 +131,8 @@ function updateHud(){
 
   const modeName={checkpoint:"定向打卡",tour:"地标巡礼",free:"自由跑",battle:"狩猎战场"}[s.mode]||s.mode;
   $("vModeTag").textContent=modeName;
+  const wx={sunny:"☀ 晴",cloudy:"☁ 多云",rain:"🌧 雨"}[ENV.weather]||ENV.weather;
+  $("vClock").textContent=ENV.clockText()+" · "+wx+(ENV.isNight()?" · 夜":"");
   const totalLm=(s.campus.landmarks||[]).length;
   if(s.mode==="tour"&&totalLm>0){
     $("rowTour").style.display="";
@@ -142,7 +161,8 @@ function updateHud(){
   refreshBattleOverlays();
 
   $("vMode").textContent = boot.autopilot?"自动驾驶中":"手动模式";
-  Progress.observe(session, inBattle?BATTLE:null);
+  Progress.observe(session, inBattle?BATTLE:null, typeof ENV!=="undefined"?ENV:null);
+  observePickups(s);
   $("json").textContent = JSON.stringify({
     v:1, seq:s.feed.seq, active:true, running:s.isRunning,
     distanceMeters:+s.recordedDist.toFixed(2), durationSeconds:+s.duration.toFixed(1),
