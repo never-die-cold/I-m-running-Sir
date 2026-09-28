@@ -5,11 +5,18 @@
 const keys={};
 window.addEventListener("keydown",e=>{
   keys[e.code]=true;
+  /* 战斗升级三选一：1/2/3 选牌（优先于模式切换） */
+  if(BATTLE.state==="levelup"){
+    if(e.code==="Digit1"){ applySkill(0); return; }
+    if(e.code==="Digit2"){ applySkill(1); return; }
+    if(e.code==="Digit3"){ applySkill(2); return; }
+  }
   if(e.code==="Space"){ e.preventDefault(); boot.autopilot=!boot.autopilot; }
   if(e.code==="KeyT"){ resetRun(); }
   if(e.code==="Digit1"){ session.setMode("checkpoint"); resetRun(); }
   if(e.code==="Digit2"){ session.setMode("tour"); resetRun(); }
   if(e.code==="Digit3"){ session.setMode("free"); resetRun(); }
+  if(e.code==="Digit4"){ session.setMode("battle"); resetRun(); }
   if(e.code==="Equal"||e.code==="NumpadAdd"){ cam.zoom=Math.min(CAM_MAX,cam.zoom*1.18); }
   if(e.code==="Minus"||e.code==="NumpadSubtract"){ cam.zoom=Math.max(CAM_MIN,cam.zoom/1.18); }
 });
@@ -67,6 +74,7 @@ function resetRun(){
   else session.checkpoints=[];
   session.landmarksFound=[];
   session.stamina=100;
+  if(session.mode==="battle") battleReset(20260924);
   session.startRun();
   boot.autopilot=false;
   cam.x=session.worldPos.x; cam.y=session.worldPos.y;
@@ -99,12 +107,23 @@ function loop(nowMs){
   let realDt=Math.min(0.05, now-boot.lastTime);
   boot.lastTime=now;
 
-  const dt = realDt * boot.speedMul;
   const wallMs = Date.now();
+  const battleMode = session.mode==="battle";
+  /* 战斗模式永远实时（1×），其他模式保持演示加速 */
+  const dt = battleMode ? realDt : realDt * boot.speedMul;
 
-  const sprint = !!(keys.ShiftLeft||keys.ShiftRight);
-  if(boot.autopilot) session.tickAutopilot(dt, wallMs, boot.targetSpeed);
-  else session.tick(dt, wallMs, readInput(), boot.targetSpeed, sprint);
+  if(battleMode && BATTLE.state==="fighting"){
+    const dir=readInput();
+    const sprint = !!(keys.ShiftLeft||keys.ShiftRight);
+    const moving = dir.x!==0||dir.y!==0;
+    session.tick(dt, wallMs, dir, boot.targetSpeed*BATTLE.player.moveMul, sprint);
+    battleTick(dt, session.worldPos, moving);
+  } else if(!battleMode){
+    const sprint = !!(keys.ShiftLeft||keys.ShiftRight);
+    if(boot.autopilot) session.tickAutopilot(dt, wallMs, boot.targetSpeed);
+    else session.tick(dt, wallMs, readInput(), boot.targetSpeed, sprint);
+  }
+  /* 升级选牌 / 倒下：画面冻结，等待选择或 T 重开 */
 
   const k=1-Math.exp(-realDt*6);
   cam.x += (session.worldPos.x-cam.x)*k;

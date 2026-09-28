@@ -1,0 +1,272 @@
+"use strict";
+/* ============================================================
+   battle.js —— 弓箭手大作战式战斗层
+   规则：走位时不出箭，停下自动索敌；波次刷怪；击杀得经验，
+   升级三选一天赋；体力冲刺仍是走位保命手段；里程照常计入 GPS。
+   本文件为纯逻辑（确定性，seed 固定），headless 可测。
+   ============================================================ */
+
+const BATTLE = {
+  player: null,
+  enemies: [],      // {id,type,x,y,hp,maxHp,fireT,dashT,dashVx,dashVy,hitCd,seedSign}
+  bullets: [],      // 玩家箭 {x,y,vx,vy,pierce,rico,hits,life}
+  ebullets: [],     // 敌方弹 {x,y,vx,vy,dmg,life}
+  fx: [],           // {x,y,age,dur,r,color}
+  wave: 0, kills: 0, exp: 0, level: 1, expNext: 10,
+  state: "fighting",   // fighting | levelup | dead
+  choices: [],
+  rng: null, _nextId: 1,
+  waveTimer: 0, fireCd: 0, novaCd: 0, time: 0,
+};
+
+const ENEMY_TYPES = {
+  chaser:  { hp:22,  speed:2.7, r:6,  dmg:10, exp:3,  color:"#ff6b5a" },
+  shooter: { hp:16,  speed:2.0, r:6,  dmg:8,  exp:4,  color:"#ffb84d", fireInterval:2.6, bulletSpeed:9.5 },
+  charger: { hp:34,  speed:2.4, r:7,  dmg:14, exp:6,  color:"#e858c8", dashCd:3.4, dashSpeed:13 },
+  boss:    { hp:220, speed:2.6, r:12, dmg:20, exp:40, color:"#ff3b30", fireInterval:1.7, bulletSpeed:8.5 }
+};
+
+const BULLET_SPEED = 26;
+
+const SKILLS = [
+  { id:"multi",    n:"多重射击", d:"同时射出的箭 +1",        ok:p=>p.arrows<6,        ap:p=>{p.arrows++;} },
+  { id:"pierce",   n:"穿透箭",   d:"箭可多穿透 1 名敌人",     ok:p=>p.pierce<3,        ap:p=>{p.pierce++;} },
+  { id:"ricochet", n:"弹射",     d:"命中后弹向下一个敌人",    ok:p=>p.ricochet<3,      ap:p=>{p.ricochet++;} },
+  { id:"aspd",     n:"疾射",     d:"攻击间隔 -18%",          ok:p=>p.atkInterval>0.18,ap:p=>{p.atkInterval*=0.82;} },
+  { id:"atk",      n:"力量",     d:"攻击力 +30%",            ok:()=>true,             ap:p=>{p.atk*=1.3;} },
+  { id:"speed",    n:"轻身",     d:"移动速度 +12%",          ok:p=>p.moveMul<1.8,     ap:p=>{p.moveMul*=1.12;} },
+  { id:"nova",     n:"环射",     d:"每 4 秒向四周放一圈箭",   ok:p=>p.nova<3,          ap:p=>{p.nova++; if(p.nova===1)p.novaCd=1;} },
+  { id:"heal",     n:"回春",     d:"回满生命，生命上限 +20",  ok:()=>true,             ap:p=>{p.maxHp+=20; p.hp=p.maxHp;} },
+  { id:"range",    n:"鹰眼",     d:"索敌射程 +25%",          ok:p=>p.range<420,       ap:p=>{p.range*=1.25;} },
+];
+
+function battleReset(seed){
+  BATTLE.player = { hp:100, maxHp:100, atk:10, atkInterval:0.55, arrows:1, pierce:0,
+                    ricochet:0, moveMul:1, range:150, nova:0, novaCd:0 };
+  BATTLE.enemies=[]; BATTLE.bullets=[]; BATTLE.ebullets=[]; BATTLE.fx=[];
+  BATTLE.wave=0; BATTLE.kills=0; BATTLE.exp=0; BATTLE.level=1; BATTLE.expNext=10;
+  BATTLE.state="fighting"; BATTLE.choices=[];
+  BATTLE.rng=new Rng((seed===undefined?20260924:seed)>>>0);
+  BATTLE._nextId=1; BATTLE.waveTimer=1.5; BATTLE.fireCd=0; BATTLE.novaCd=0; BATTLE.time=0;
+}
+
+function battleSpawnWave(){
+  BATTLE.wave++;
+  const n=BATTLE.wave;
+  const px=BATTLE._px, py=BATTLE._py;
+  const bounds=CAMPUS.bounds, inset=30;
+  const clamp=(p)=>{
+    p.x=Math.max(bounds.minX+inset,Math.min(bounds.maxX-inset,p.x));
+    p.y=Math.max(bounds.minY+inset,Math.min(bounds.maxY-inset,p.y));
+    return p;
+  };
+  const ringPos=()=>{
+    const a=BATTLE.rng.next()*Math.PI*2;
+    const d=70+BATTLE.rng.next()*45;
+    return clamp({x:px+Math.cos(a)*d, y:py+Math.sin(a)*d});
+  };
+  const push=(type)=>{
+    const t=ENEMY_TYPES[type];
+    const p=ringPos();
+    BATTLE.enemies.push({ id:BATTLE._nextId++, type, x:p.x, y:p.y, hp:t.hp, maxHp:t.hp,
+      fireT:t.fireInterval?BATTLE.rng.range(0.5,t.fireInterval):0,
+      dashT:t.dashCd?BATTLE.rng.range(1,t.dashCd):0, dashVx:0, dashVy:0, dashLeft:0,
+      hitCd:0, sign:BATTLE.rng.next()<0.5?-1:1 });
+  };
+  if(n%5===0){ push("boss"); push("chaser"); push("chaser"); }
+  else {
+    const ch=2+Math.ceil(n/2), sh=n>=2?Math.floor(n/2):0, cg=n>=3?Math.floor((n-1)/3):0;
+    for(let i=0;i<ch;i++) push("chaser");
+    for(let i=0;i<sh;i++) push("shooter");
+    for(let i=0;i<cg;i++) push("charger");
+  }
+}
+
+function battleFireAt(target){
+  const p=BATTLE.player;
+  const base=Math.atan2(target.y-BATTLE._py, target.x-BATTLE._px);
+  const N=p.arrows, spread=0.14;
+  for(let i=0;i<N;i++){
+    const a=base+(i-(N-1)/2)*spread;
+    BATTLE.bullets.push({ x:BATTLE._px, y:BATTLE._py, vx:Math.cos(a)*BULLET_SPEED,
+      vy:Math.sin(a)*BULLET_SPEED, pierce:p.pierce, rico:p.ricochet, hits:[], life:2.4 });
+  }
+  BATTLE.fireCd=p.atkInterval;
+}
+
+function battleHurtPlayer(dmg){
+  const p=BATTLE.player;
+  p.hp-=dmg;
+  BATTLE.fx.push({x:BATTLE._px,y:BATTLE._py,age:0,dur:0.35,r:16,color:"#ff6b5a"});
+  if(p.hp<=0){ p.hp=0; BATTLE.state="dead"; }
+}
+
+function battleKill(e){
+  const t=ENEMY_TYPES[e.type];
+  BATTLE.kills++;
+  BATTLE.exp+=t.exp;
+  BATTLE.fx.push({x:e.x,y:e.y,age:0,dur:0.5,r:t.r*2.2,color:t.color});
+}
+
+function battleTryLevelUp(){
+  while(BATTLE.exp>=BATTLE.expNext && BATTLE.state==="fighting"){
+    BATTLE.exp-=BATTLE.expNext;
+    BATTLE.level++;
+    BATTLE.expNext=Math.round(BATTLE.expNext*1.45+2);
+    BATTLE.state="levelup";
+    battleRollChoices();
+  }
+}
+
+function battleRollChoices(){
+  const p=BATTLE.player;
+  const pool=SKILLS.filter(s=>s.ok(p));
+  for(let i=pool.length-1;i>0;i--){
+    const j=Math.floor(BATTLE.rng.next()*(i+1));
+    const t=pool[i]; pool[i]=pool[j]; pool[j]=t;
+  }
+  BATTLE.choices=pool.slice(0,3);
+  while(BATTLE.choices.length<3) BATTLE.choices.push(SKILLS.find(s=>s.id==="heal"));
+}
+
+function applySkill(i){
+  if(BATTLE.state!=="levelup") return false;
+  const s=BATTLE.choices[i];
+  if(!s) return false;
+  s.ap(BATTLE.player);
+  BATTLE.fx.push({x:BATTLE._px,y:BATTLE._py,age:0,dur:0.6,r:30,color:"#f9c63a"});
+  BATTLE.state="fighting";
+  battleTryLevelUp();          // 经验溢出时连续升级
+  return true;
+}
+
+/* 主步进：playerPos=玩家世界坐标，moving=是否在移动（移动时不出箭） */
+function battleTick(dt, playerPos, moving){
+  if(BATTLE.state!=="fighting" || dt<=0) return;
+  const p=BATTLE.player;
+  BATTLE.time+=dt;
+  BATTLE._px=playerPos.x; BATTLE._py=playerPos.y;
+
+  BATTLE.waveTimer-=dt;
+  if(BATTLE.waveTimer<=0){ battleSpawnWave(); BATTLE.waveTimer=11; }
+
+  /* 停下自动索敌 */
+  BATTLE.fireCd-=dt;
+  if(!moving && BATTLE.fireCd<=0){
+    let best=null, bd=p.range;
+    for(const e of BATTLE.enemies){
+      const d=V.dist(playerPos,e);
+      if(d<bd){ bd=d; best=e; }
+    }
+    if(best) battleFireAt(best);
+  }
+
+  /* 环射 */
+  if(p.nova>0){
+    BATTLE.novaCd-=dt;
+    if(BATTLE.novaCd<=0){
+      BATTLE.novaCd=4;
+      const N=8+p.nova*4;
+      for(let i=0;i<N;i++){
+        const a=i/N*Math.PI*2;
+        BATTLE.bullets.push({x:BATTLE._px,y:BATTLE._py,vx:Math.cos(a)*BULLET_SPEED*0.8,
+          vy:Math.sin(a)*BULLET_SPEED*0.8,pierce:p.pierce,rico:0,hits:[],life:1.6});
+      }
+    }
+  }
+
+  /* 玩家箭 */
+  for(let bi=BATTLE.bullets.length-1;bi>=0;bi--){
+    const b=BATTLE.bullets[bi];
+    b.x+=b.vx*dt; b.y+=b.vy*dt; b.life-=dt;
+    let dead=b.life<=0;
+    if(!dead){
+      for(const e of BATTLE.enemies){
+        if(b.hits.includes(e.id)) continue;            // 同一枚箭不重复命中
+        const t=ENEMY_TYPES[e.type];
+        if(V.dist(b,{x:e.x,y:e.y}) < t.r+3.5){
+          e.hp-=p.atk; b.hits.push(e.id);
+          BATTLE.fx.push({x:e.x,y:e.y,age:0,dur:0.25,r:t.r,color:"#fff"});
+          if(e.hp<=0) battleKill(e);
+          if(b.pierce>0){ b.pierce--; }
+          else if(b.rico>0){
+            b.rico--;
+            let best=null,bd=90;
+            for(const o of BATTLE.enemies){
+              if(o.hp<=0||b.hits.includes(o.id)) continue;
+              const d=V.dist(b,o);
+              if(d<bd){ bd=d; best=o; }
+            }
+            if(best){
+              const a=Math.atan2(best.y-b.y,best.x-b.x);
+              b.vx=Math.cos(a)*BULLET_SPEED; b.vy=Math.sin(a)*BULLET_SPEED;
+            } else dead=true;
+          }
+          else dead=true;
+          break;
+        }
+      }
+    }
+    if(dead) BATTLE.bullets.splice(bi,1);
+  }
+  BATTLE.enemies=BATTLE.enemies.filter(e=>e.hp>0);
+
+  /* 敌人行为 */
+  for(const e of BATTLE.enemies){
+    const t=ENEMY_TYPES[e.type];
+    const dx=BATTLE._px-e.x, dy=BATTLE._py-e.y, d=Math.hypot(dx,dy)||1;
+    let vx=0, vy=0;
+    if(e.type==="chaser"){ vx=dx/d*t.speed; vy=dy/d*t.speed; }
+    else if(e.type==="shooter"){
+      if(d>85){ vx=dx/d*t.speed; vy=dy/d*t.speed; }
+      else if(d<55){ vx=-dx/d*t.speed; vy=-dy/d*t.speed; }
+      else { vx=-dy/d*t.speed*e.sign; vy=dx/d*t.speed*e.sign; }
+      e.fireT-=dt;
+      if(e.fireT<=0 && d<130){
+        e.fireT=t.fireInterval;
+        BATTLE.ebullets.push({x:e.x,y:e.y,vx:dx/d*t.bulletSpeed,vy:dy/d*t.bulletSpeed,
+          dmg:t.dmg,life:4});
+      }
+    }
+    else if(e.type==="charger"){
+      if(e.dashLeft>0){ e.dashLeft-=dt; vx=e.dashVx; vy=e.dashVy; }
+      else {
+        e.dashT-=dt;
+        if(e.dashT<=0 && d<75){ e.dashT=t.dashCd+BATTLE.rng.range(0,1);
+          e.dashLeft=1.0; e.dashVx=dx/d*t.dashSpeed; e.dashVy=dy/d*t.dashSpeed; }
+        else { vx=dx/d*t.speed; vy=dy/d*t.speed; }
+      }
+    }
+    else if(e.type==="boss"){
+      vx=dx/d*t.speed; vy=dy/d*t.speed;
+      e.fireT-=dt;
+      if(e.fireT<=0){
+        e.fireT=t.fireInterval;
+        for(let i=0;i<10;i++){
+          const a=i/10*Math.PI*2+BATTLE.time;
+          BATTLE.ebullets.push({x:e.x,y:e.y,vx:Math.cos(a)*t.bulletSpeed,
+            vy:Math.sin(a)*t.bulletSpeed,dmg:t.dmg,life:4});
+        }
+      }
+    }
+    e.x+=vx*dt; e.y+=vy*dt;
+    e.hitCd-=dt;
+    if(d < t.r+5 && e.hitCd<=0){ e.hitCd=0.9; battleHurtPlayer(t.dmg); }
+  }
+
+  /* 敌方弹 */
+  for(let i=BATTLE.ebullets.length-1;i>=0;i--){
+    const b=BATTLE.ebullets[i];
+    b.x+=b.vx*dt; b.y+=b.vy*dt; b.life-=dt;
+    let dead=b.life<=0;
+    if(!dead && V.dist(b,playerPos)<5){ battleHurtPlayer(b.dmg); dead=true; }
+    if(dead) BATTLE.ebullets.splice(i,1);
+  }
+
+  for(let i=BATTLE.fx.length-1;i>=0;i--){
+    BATTLE.fx[i].age+=dt;
+    if(BATTLE.fx[i].age>=BATTLE.fx[i].dur) BATTLE.fx.splice(i,1);
+  }
+
+  battleTryLevelUp();
+}

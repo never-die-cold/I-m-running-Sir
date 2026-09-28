@@ -38,6 +38,7 @@ function draw(){
   drawLandmarks();
   drawCheckpoints();
   drawNav();
+  if(session.mode==="battle") drawBattle();
   drawPlayer();
 }
 
@@ -197,6 +198,70 @@ function drawCheckpoints(){
     }
     ctx.restore();
   }
+}
+
+function drawBattle(){
+  /* 命中特效 */
+  for(const f of BATTLE.fx){
+    const [x,y]=w2s(f.x,f.y);
+    const t=f.age/f.dur;
+    ctx.strokeStyle=f.color;
+    ctx.globalAlpha=(1-t)*0.8;
+    ctx.lineWidth=2;
+    ctx.beginPath(); ctx.arc(x,y,f.r*cam.zoom*(0.5+t),0,7); ctx.stroke();
+    ctx.globalAlpha=1;
+  }
+  /* 敌人 */
+  for(const e of BATTLE.enemies){
+    const t=ENEMY_TYPES[e.type];
+    const [x,y]=w2s(e.x,e.y);
+    const r=Math.max(3,t.r*cam.zoom);
+    if(x<-40||x>W+40||y<-40||y>H+40) continue;
+    ctx.save();
+    if(e.type==="shooter"){
+      ctx.fillStyle=t.color;
+      ctx.beginPath();
+      ctx.moveTo(x,y-r*1.3); ctx.lineTo(x+r*1.1,y); ctx.lineTo(x,y+r*1.3); ctx.lineTo(x-r*1.1,y);
+      ctx.closePath(); ctx.fill();
+    } else if(e.type==="charger"){
+      const a=Math.atan2(BATTLE._py-e.y,BATTLE._px-e.x);
+      ctx.translate(x,y); ctx.rotate(a);
+      ctx.fillStyle=t.color;
+      ctx.beginPath(); ctx.moveTo(r*1.4,0); ctx.lineTo(-r,r*0.9); ctx.lineTo(-r,-r*0.9);
+      ctx.closePath(); ctx.fill();
+      ctx.rotate(-a); ctx.translate(-x,-y);
+    } else {
+      ctx.fillStyle=t.color;
+      ctx.beginPath(); ctx.arc(x,y,r,0,7); ctx.fill();
+    }
+    ctx.strokeStyle="rgba(0,0,0,.5)"; ctx.lineWidth=1.2; ctx.stroke();
+    /* 血条 */
+    const bw=Math.max(14,r*2.4);
+    ctx.fillStyle="rgba(0,0,0,.55)";
+    ctx.fillRect(x-bw/2,y-r-8,bw,3);
+    ctx.fillStyle=e.type==="boss"?"#ffd23f":"#71e88a";
+    ctx.fillRect(x-bw/2,y-r-8,bw*Math.max(0,e.hp/e.maxHp),3);
+    if(e.type==="boss"){
+      ctx.strokeStyle="rgba(255,210,63,.9)"; ctx.lineWidth=2;
+      ctx.beginPath(); ctx.arc(x,y,r+3+Math.sin(BATTLE.time*6)*1.5,0,7); ctx.stroke();
+    }
+    ctx.restore();
+  }
+  /* 敌方弹 */
+  for(const b of BATTLE.ebullets){
+    const [x,y]=w2s(b.x,b.y);
+    ctx.fillStyle="#ff8a5a";
+    ctx.beginPath(); ctx.arc(x,y,Math.max(2.4,3.6*cam.zoom),0,7); ctx.fill();
+  }
+  /* 玩家箭 */
+  ctx.strokeStyle="#ffe98a"; ctx.lineWidth=Math.max(1.4,2.2*cam.zoom); ctx.lineCap="round";
+  ctx.beginPath();
+  for(const b of BATTLE.bullets){
+    const [x,y]=w2s(b.x,b.y);
+    const [x2,y2]=w2s(b.x-b.vx*0.045, b.y-b.vy*0.045);
+    ctx.moveTo(x2,y2); ctx.lineTo(x,y);
+  }
+  ctx.stroke();
 }
 
 function drawPlayer(){

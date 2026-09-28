@@ -222,6 +222,46 @@ const test = `
   for (let i = 0; i < 24; i++) session.tick(0.25, Date.now(), { x: 1, y: 0 }, 2.94, false);
   check("stamina regenerates when not sprinting (6s -> >=35)", session.stamina >= 35);
 
+  /* ---- 战斗层（弓箭手大作战式）：波次/索敌/伤害/升级/死亡 ---- */
+  session.setMode("battle"); resetRun();
+  check("battle mode accepted, no checkpoints", session.checkpoints.length === 0 &&
+    BATTLE.state === "fighting" && BATTLE.wave === 0 && BATTLE.enemies.length === 0);
+  battleTick(2.0, session.worldPos, false);
+  check("wave 1 spawns chasers on schedule", BATTLE.wave === 1 &&
+    BATTLE.enemies.length === 3 && BATTLE.enemies.every(e => e.type === "chaser"));
+  battleTick(0.6, session.worldPos, false);
+  check("stand still auto-fires arrows", BATTLE.bullets.length > 0);
+  BATTLE.bullets.length = 0; BATTLE.fireCd = 0;
+  battleTick(0.1, session.worldPos, true);
+  check("no arrows while moving", BATTLE.bullets.length === 0);
+  const e0 = BATTLE.enemies[0];
+  e0.x = session.worldPos.x + 20; e0.y = session.worldPos.y;
+  const hp0 = e0.hp;
+  BATTLE.bullets.length = 0; BATTLE.fireCd = 0;
+  for (let i = 0; i < 12; i++) battleTick(0.1, session.worldPos, false);
+  check("arrow damages enemy", e0.hp < hp0 || e0.hp <= 0);
+  BATTLE.enemies.forEach(e => { e.hp = 1; });
+  BATTLE.bullets.length = 0; BATTLE.fireCd = 0;
+  const kills0 = BATTLE.kills;
+  for (let i = 0; i < 10; i++) battleTick(0.1, session.worldPos, false);
+  check("kill grants exp/kills", BATTLE.kills > kills0 && BATTLE.exp + (BATTLE.level - 1) * 10 > 0);
+  BATTLE.exp = BATTLE.expNext;
+  battleTick(0.05, session.worldPos, false);
+  check("levelup pauses with 3 choices", BATTLE.state === "levelup" && BATTLE.choices.length === 3);
+  const snap = JSON.stringify(BATTLE.player);
+  check("applySkill applies an effect and resumes", (() => {
+    const ok = applySkill(0);
+    return ok && BATTLE.state === "fighting" && JSON.stringify(BATTLE.player) !== snap;
+  })());
+  BATTLE.enemies = []; BATTLE.ebullets = []; BATTLE.bullets = [];
+  BATTLE.enemies.push({ id: 9001, type: "chaser", x: BATTLE._px, y: BATTLE._py, hp: 999, maxHp: 999,
+    fireT: 0, dashT: 0, dashVx: 0, dashVy: 0, dashLeft: 0, hitCd: 0, sign: 1 });
+  battleTick(0.1, session.worldPos, false);
+  check("enemy contact damages player", BATTLE.player.hp < 100);
+  BATTLE.player.hp = 5;
+  battleTick(1.0, session.worldPos, false);
+  check("player dies at 0 hp", BATTLE.state === "dead" && BATTLE.player.hp === 0);
+
   /* 恢复默认状态 */
   session.setMode("checkpoint"); resetRun();
 

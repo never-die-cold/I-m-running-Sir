@@ -46,6 +46,20 @@
   #badge { font-size:9.5px; color:#ffb84d; margin-left:4px; letter-spacing:.05em; }
   #boot { position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
     color:#7d8a86; font-size:13px; background:#07090a; }
+
+  .overlay { position:absolute; inset:0; display:none; align-items:center; justify-content:center;
+    background:rgba(4,7,9,.62); z-index:10; }
+  .overlay .card { background:rgba(9,13,15,.94); border:1px solid #8b5fbf; border-radius:6px;
+    padding:18px 22px; box-shadow:0 10px 40px rgba(0,0,0,.6); text-align:center; min-width:320px; }
+  .overlay h2 { color:#f9c63a; font-size:16px; letter-spacing:.2em; margin-bottom:12px; }
+  .overlay .cards { display:flex; gap:10px; }
+  .overlay .skcard { width:150px; padding:12px 10px; background:#141a1b; border:1px solid #3a4644;
+    border-radius:5px; cursor:pointer; color:#eef3f1; font-size:12px; line-height:1.5; }
+  .overlay .skcard:hover { border-color:#8b5fbf; background:#1c2325; }
+  .overlay .skcard b { display:block; color:#c9b3e6; font-size:13px; margin-bottom:4px; }
+  .overlay .skcard i { display:block; font-style:normal; color:#7d8a86; font-size:10.5px; margin-top:2px; }
+  .overlay p { color:#8d9a96; font-size:11.5px; margin-top:10px; }
+  #deadStats { color:#eef3f1; font-size:13px; line-height:1.9; }
 </style>
 </head>
 <body>
@@ -61,6 +75,14 @@
   <div class="row"><span class="k">AVG PACE 均配速</span><span class="v" id="vAvg">--'--"</span></div>
   <div class="row"><span class="k">STAMINA 体力</span><span class="v" id="vSta">100%</span></div>
   <div class="bar"><i id="vStaBar" style="background:#71e88a"></i></div>
+  <div id="battleRows" style="display:none">
+    <div class="row" style="margin-top:6px"><span class="k">HP 生命</span><span class="v" id="vHp">100 / 100</span></div>
+    <div class="bar"><i id="vHpBar" style="background:#ff6b5a"></i></div>
+    <div class="row" style="margin-top:6px"><span class="k">EXP 经验</span><span class="v" id="vExp">Lv.1</span></div>
+    <div class="bar"><i id="vExpBar" style="background:#3fd6ff"></i></div>
+    <div class="row" style="margin-top:6px"><span class="k">WAVE 波次</span><span class="v" id="vWave">0</span></div>
+    <div class="row"><span class="k">KILLS 击杀</span><span class="v" id="vKill">0</span></div>
+  </div>
 </div>
 
 <div class="panel" id="pRight">
@@ -87,6 +109,8 @@
     <b id="vMode">手动模式</b> ·
     <span class="kbd">WASD</span> / 拖左半屏 移动 ·
     <span class="kbd">空格</span> 自动驾驶 ·
+    <span class="kbd">Shift</span> 冲刺 ·
+    <span class="kbd">1-4</span> 模式(4=战斗) ·
     <span class="kbd">T</span> 重置 ·
     <span class="kbd">滚轮</span> 缩放
   </div>
@@ -100,11 +124,28 @@
   <button data-s="20">20×</button>
 </div>
 
+<div class="overlay" id="lvlOverlay">
+  <div class="card">
+    <h2>升 级 ！选 择 强 化</h2>
+    <div class="cards" id="lvlCards"></div>
+    <p>点击卡片或按 <span class="kbd">1</span> <span class="kbd">2</span> <span class="kbd">3</span> 选择</p>
+  </div>
+</div>
+
+<div class="overlay" id="deadOverlay">
+  <div class="card">
+    <h2>你 倒 下 了</h2>
+    <div id="deadStats"></div>
+    <p>按 <span class="kbd">T</span> 重新开始</p>
+  </div>
+</div>
+
 <script src="js/geo.js"></script>
 <script src="js/campus.js"></script>
 <script src="js/campus-suzhou.js"></script>
 <script src="js/campus-demo.js"></script>
 <script src="js/sim.js"></script>
+<script src="js/battle.js"></script>
 <script src="js/render.js"></script>
 <script src="js/ui.js"></script>
 <script src="js/main.js"></script>

@@ -154,7 +154,7 @@ class RunSession {
 
   /* ---- 玩法（c4）：模式 / 体力 / 导航 / 巡礼 ---- */
   setMode(m){
-    if(!["checkpoint","tour","free"].includes(m)) throw new Error("bad mode: "+m);
+    if(!["checkpoint","tour","free","battle"].includes(m)) throw new Error("bad mode: "+m);
     this.mode=m;
     if(m!=="checkpoint") this.checkpoints=[];
     return this.mode;
