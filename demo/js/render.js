@@ -208,6 +208,13 @@ function drawCheckpoints(){
       ctx.beginPath(); ctx.arc(x,y,r,0,7); ctx.stroke();
       ctx.strokeStyle="rgba(63,214,255,.95)"; ctx.lineWidth=2.4;
       ctx.beginPath(); ctx.arc(x,y,r*(0.55+0.25*pulse),0,7); ctx.stroke();
+      /* 信标光柱（游戏目标感） */
+      const beamH=Math.min(150, r*2.2+36);
+      const bg=ctx.createLinearGradient(x,y-beamH,x,y);
+      bg.addColorStop(0,"rgba(63,214,255,0)");
+      bg.addColorStop(1,"rgba(63,214,255,.35)");
+      ctx.fillStyle=bg;
+      ctx.fillRect(x-3*cam.zoom-1.2, y-beamH, 6*cam.zoom+2.4, beamH);
       ctx.fillStyle="#3fd6ff";
       ctx.font="bold 11px sans-serif"; ctx.textAlign="center";
       ctx.fillText("打卡点 "+(cp.index+1), x, y-r-8);
@@ -234,6 +241,9 @@ function drawBattle(){
     const r=Math.max(3,t.r*cam.zoom);
     if(x<-40||x>W+40||y<-40||y>H+40) continue;
     ctx.save();
+    /* 脚下阴影 */
+    ctx.fillStyle="rgba(0,0,0,.30)";
+    ctx.beginPath(); ctx.ellipse(x,y+r*0.7,r*0.95,r*0.42,0,0,7); ctx.fill();
     if(e.type==="shooter"){
       ctx.fillStyle=t.color;
       ctx.beginPath();
@@ -251,6 +261,11 @@ function drawBattle(){
       ctx.beginPath(); ctx.arc(x,y,r,0,7); ctx.fill();
     }
     ctx.strokeStyle="rgba(0,0,0,.5)"; ctx.lineWidth=1.2; ctx.stroke();
+    /* 受击闪白 */
+    if(e.flash>0){
+      ctx.fillStyle="rgba(255,255,255,"+(e.flash/0.15*0.85).toFixed(2)+")";
+      ctx.beginPath(); ctx.arc(x,y,r+1,0,7); ctx.fill();
+    }
     /* 血条 */
     const bw=Math.max(14,r*2.4);
     ctx.fillStyle="rgba(0,0,0,.55)";
@@ -288,6 +303,9 @@ function drawPlayer(){
     : { x:0, y:-1 };
 
   ctx.save();
+  /* 脚下阴影 */
+  ctx.fillStyle="rgba(0,0,0,.30)";
+  ctx.beginPath(); ctx.ellipse(x+2,y+8,9,4,0,0,7); ctx.fill();
   const g=ctx.createRadialGradient(x,y,2,x,y,34);
   g.addColorStop(0,"rgba(249,198,58,.42)"); g.addColorStop(1,"rgba(249,198,58,0)");
   ctx.fillStyle=g; ctx.beginPath(); ctx.arc(x,y,34,0,7); ctx.fill();

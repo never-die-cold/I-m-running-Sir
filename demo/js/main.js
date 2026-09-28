@@ -88,11 +88,12 @@ let session, boot;
 function resetRun(){
   if (typeof Progress !== "undefined") Progress.finishRun(session, session.mode==="battle"?BATTLE:null);
   session.resetToRouteStart();
-  if(session.mode==="checkpoint") session.spawnCheckpoints(boot.cpCount||3, 80, 120, 0.15);
+  if(session.mode==="checkpoint"||session.mode==="battle")
+    session.spawnCheckpoints(boot.cpCount||3, 80, 120, 0.15);
   else session.checkpoints=[];
   session.landmarksFound=[];
   session.stamina=100;
-  if(session.mode==="battle") battleReset(20260924);
+  if(session.mode==="battle") battleReset(20260924, session);
   session.startRun();
   boot.autopilot=false;
   cam.x=session.worldPos.x; cam.y=session.worldPos.y;

@@ -180,7 +180,7 @@ function showResult(title){
   $("deadStars").innerHTML=starsText(s);
   if(session.mode==="battle"){
     $("deadStats").innerHTML=
-      "存活波次 <b>"+BATTLE.wave+"</b> · 击杀 <b>"+BATTLE.kills+"</b> · 等级 <b>Lv."+BATTLE.level+"</b><br>"+
+      "推进站点 <b>"+BATTLE.wave+" / "+BATTLE.roomsTotal+"</b> · 击杀 <b>"+BATTLE.kills+"</b> · 等级 <b>Lv."+BATTLE.level+"</b><br>"+
       "本次里程 <b>"+(session.recordedDist/1000).toFixed(2)+" km</b> · 用时 <b>"+fmtDur(session.duration)+"</b>";
   } else {
     const pace=session.duration>1?1000*session.duration/Math.max(1,session.recordedDist):0;
@@ -252,7 +252,8 @@ function updateHud(){
   $("vCp").parentElement.style.display=inBattle?"none":"";
   $("vCpBar").style.display=inBattle?"none":"";
   if(inBattle){
-    $("vWave").textContent=bt.wave;
+    $("vWave").textContent=bt.wave+" / "+bt.roomsTotal;
+    $("vRoom").textContent=bt.room?(bt.enemies.length+" 只"):"-";
     $("vKill").textContent=bt.kills;
     const hpPct=Math.max(0,Math.round(bt.player.hp/bt.player.maxHp*100));
     $("vHp").textContent=Math.ceil(bt.player.hp)+" / "+bt.player.maxHp;

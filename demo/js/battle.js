@@ -8,15 +8,19 @@
 
 const BATTLE = {
   player: null,
-  enemies: [],      // {id,type,x,y,hp,maxHp,fireT,dashT,dashVx,dashVy,hitCd,seedSign}
+  enemies: [],      // {id,type,x,y,hp,maxHp,fireT,dashT,dashVx,dashVy,dashLeft,hitCd,flash,seedSign}
   bullets: [],      // 玩家箭 {x,y,vx,vy,pierce,rico,hits,life}
   ebullets: [],     // 敌方弹 {x,y,vx,vy,dmg,life}
   fx: [],           // {x,y,age,dur,r,color}
-  wave: 0, kills: 0, exp: 0, level: 1, expNext: 10,
+  wave: 0,          // 当前站点编号（1 起），0=赶路中
+  roomsTotal: 0,    // 站点总数
+  room: null,       // 当前驻守的打卡点（清空前不再触发新房间）
+  kills: 0, exp: 0, level: 1, expNext: 10,
   state: "fighting",   // fighting | levelup | dead
   choices: [],
+  session: null,
   rng: null, _nextId: 1,
-  waveTimer: 0, fireCd: 0, novaCd: 0, time: 0,
+  fireCd: 0, novaCd: 0, time: 0,
 };
 
 const ENEMY_TYPES = {
@@ -40,21 +44,23 @@ const SKILLS = [
   { id:"range",    n:"鹰眼",     d:"索敌射程 +25%",          ok:p=>p.range<420,       ap:p=>{p.range*=1.25;} },
 ];
 
-function battleReset(seed){
+function battleReset(seed, session){
   BATTLE.player = { hp:100, maxHp:100, atk:10, atkInterval:0.55, arrows:1, pierce:0,
                     ricochet:0, moveMul:1, range:150, nova:0, novaCd:0 };
   BATTLE.enemies=[]; BATTLE.bullets=[]; BATTLE.ebullets=[]; BATTLE.fx=[];
-  BATTLE.wave=0; BATTLE.kills=0; BATTLE.exp=0; BATTLE.level=1; BATTLE.expNext=10;
+  BATTLE.wave=0; BATTLE.roomsTotal=0; BATTLE.room=null;
+  BATTLE.kills=0; BATTLE.exp=0; BATTLE.level=1; BATTLE.expNext=10;
   BATTLE.state="fighting"; BATTLE.choices=[];
+  BATTLE.session=session||null;
+  if(session) BATTLE.roomsTotal=session.checkpoints.length;
   BATTLE.rng=new Rng((seed===undefined?20260924:seed)>>>0);
-  BATTLE._nextId=1; BATTLE.waveTimer=1.5; BATTLE.fireCd=0; BATTLE.novaCd=0; BATTLE.time=0;
+  BATTLE._nextId=1; BATTLE.fireCd=0; BATTLE.novaCd=0; BATTLE.time=0;
 }
 
-function battleSpawnWave(){
-  BATTLE.wave++;
-  const n=BATTLE.wave;
-  const px=BATTLE._px, py=BATTLE._py;
+/* 站点出怪：怪物以打卡点为中心驻守；末站为 BOSS 房 */
+function battleSpawnRoom(cp){
   const bounds=CAMPUS.bounds, inset=30;
+  const cx=cp.localMeters.x, cy=cp.localMeters.y;
   const clamp=(p)=>{
     p.x=Math.max(bounds.minX+inset,Math.min(bounds.maxX-inset,p.x));
     p.y=Math.max(bounds.minY+inset,Math.min(bounds.maxY-inset,p.y));
@@ -62,8 +68,8 @@ function battleSpawnWave(){
   };
   const ringPos=()=>{
     const a=BATTLE.rng.next()*Math.PI*2;
-    const d=70+BATTLE.rng.next()*45;
-    return clamp({x:px+Math.cos(a)*d, y:py+Math.sin(a)*d});
+    const d=18+BATTLE.rng.next()*26;
+    return clamp({x:cx+Math.cos(a)*d, y:cy+Math.sin(a)*d});
   };
   const push=(type)=>{
     const t=ENEMY_TYPES[type];
@@ -71,15 +77,17 @@ function battleSpawnWave(){
     BATTLE.enemies.push({ id:BATTLE._nextId++, type, x:p.x, y:p.y, hp:t.hp, maxHp:t.hp,
       fireT:t.fireInterval?BATTLE.rng.range(0.5,t.fireInterval):0,
       dashT:t.dashCd?BATTLE.rng.range(1,t.dashCd):0, dashVx:0, dashVy:0, dashLeft:0,
-      hitCd:0, sign:BATTLE.rng.next()<0.5?-1:1 });
+      hitCd:0, flash:0, sign:BATTLE.rng.next()<0.5?-1:1 });
   };
-  if(n%5===0){ push("boss"); push("chaser"); push("chaser"); }
+  const i=cp.index, isBossRoom=(i===BATTLE.roomsTotal-1);
+  if(isBossRoom){ push("boss"); push("chaser"); push("chaser"); push("shooter"); }
   else {
-    const ch=2+Math.ceil(n/2), sh=n>=2?Math.floor(n/2):0, cg=n>=3?Math.floor((n-1)/3):0;
-    for(let i=0;i<ch;i++) push("chaser");
-    for(let i=0;i<sh;i++) push("shooter");
-    for(let i=0;i<cg;i++) push("charger");
+    const ch=2+Math.ceil((i+1)/2), sh=i>=1?Math.floor((i+1)/2):0, cg=i>=2?1+(i>=4?1:0):0;
+    for(let k=0;k<ch;k++) push("chaser");
+    for(let k=0;k<sh;k++) push("shooter");
+    for(let k=0;k<cg;k++) push("charger");
   }
+  BATTLE.fx.push({x:cx,y:cy,age:0,dur:0.8,r:cp.radius*0.7,color:"#ff6b5a"});
 }
 
 function battleFireAt(target){
@@ -147,8 +155,16 @@ function battleTick(dt, playerPos, moving){
   BATTLE.time+=dt;
   BATTLE._px=playerPos.x; BATTLE._py=playerPos.y;
 
-  BATTLE.waveTimer-=dt;
-  if(BATTLE.waveTimer<=0){ battleSpawnWave(); BATTLE.waveTimer=11; }
+  /* 站点触发：进圈 → 守怪现身；清空本站 → 自动打卡 */
+  const s=BATTLE.session;
+  if(!BATTLE.room && s && s.mode==="battle" && s.checkpoints.length>0){
+    const next=s.checkpoints.find(c=>!c.cleared);
+    if(next && V.dist(playerPos,next.localMeters) <= next.radius+10){
+      BATTLE.room=next;
+      BATTLE.wave=next.index+1;
+      battleSpawnRoom(next);
+    }
+  }
 
   /* 停下自动索敌 */
   BATTLE.fireCd-=dt;
@@ -185,7 +201,7 @@ function battleTick(dt, playerPos, moving){
         if(b.hits.includes(e.id)) continue;            // 同一枚箭不重复命中
         const t=ENEMY_TYPES[e.type];
         if(V.dist(b,{x:e.x,y:e.y}) < t.r+3.5){
-          e.hp-=p.atk; b.hits.push(e.id);
+          e.hp-=p.atk; b.hits.push(e.id); e.flash=0.15;
           BATTLE.fx.push({x:e.x,y:e.y,age:0,dur:0.25,r:t.r,color:"#fff"});
           if(e.hp<=0) battleKill(e);
           if(b.pierce>0){ b.pierce--; }
@@ -211,9 +227,20 @@ function battleTick(dt, playerPos, moving){
   }
   BATTLE.enemies=BATTLE.enemies.filter(e=>e.hp>0);
 
+  /* 本站清空 → 打卡 + 通关经验 */
+  if(BATTLE.room && BATTLE.enemies.length===0){
+    BATTLE.room.cleared=true;
+    BATTLE.exp+=8;
+    BATTLE.fx.push({x:BATTLE.room.localMeters.x,y:BATTLE.room.localMeters.y,age:0,dur:0.9,
+                    r:BATTLE.room.radius,color:"#f9c63a"});
+    BATTLE.room=null;
+    battleTryLevelUp();
+  }
+
   /* 敌人行为 */
   for(const e of BATTLE.enemies){
     const t=ENEMY_TYPES[e.type];
+    e.flash=Math.max(0,e.flash-dt);
     const dx=BATTLE._px-e.x, dy=BATTLE._py-e.y, d=Math.hypot(dx,dy)||1;
     let vx=0, vy=0;
     if(e.type==="chaser"){ vx=dx/d*t.speed; vy=dy/d*t.speed; }

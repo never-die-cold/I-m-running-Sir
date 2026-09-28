@@ -266,7 +266,8 @@ class RunSession {
       }
     }
 
-    this.updateCheckpoints(fix);
+    /* 战斗模式：打卡点由"清空守怪"判定，不走 GPS 进圈 */
+    if(this.mode!=="battle") this.updateCheckpoints(fix);
     if(this.mode==="tour") this.checkLandmarks();
     this.navTarget=this.nearestUncleared();
     this.fixCount++;
@@ -274,3 +275,4 @@ class RunSession {
     return fix;
   }
 }
+

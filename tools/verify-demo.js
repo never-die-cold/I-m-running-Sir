@@ -223,13 +223,17 @@ const test = `
   for (let i = 0; i < 24; i++) session.tick(0.25, Date.now(), { x: 1, y: 0 }, 2.94, false);
   check("stamina regenerates when not sprinting (6s -> >=35)", session.stamina >= 35);
 
-  /* ---- 战斗层（弓箭手大作战式）：波次/索敌/伤害/升级/死亡 ---- */
+  /* ---- 战斗层（站点制：进圈出怪 / 清空打卡 / 末站 BOSS） ---- */
   session.setMode("battle"); resetRun();
-  check("battle mode accepted, no checkpoints", session.checkpoints.length === 0 &&
-    BATTLE.state === "fighting" && BATTLE.wave === 0 && BATTLE.enemies.length === 0);
-  battleTick(2.0, session.worldPos, false);
-  check("wave 1 spawns chasers on schedule", BATTLE.wave === 1 &&
+  check("battle mode spawns stations, no GPS auto-clear", session.checkpoints.length === 3 &&
+    BATTLE.state === "fighting" && BATTLE.roomsTotal === 3 &&
+    BATTLE.enemies.length === 0 && BATTLE.wave === 0);
+  const cp0 = session.checkpoints[0];
+  session.worldPos = { x: cp0.localMeters.x + 5, y: cp0.localMeters.y };
+  battleTick(0.05, session.worldPos, false);
+  check("entering station spawns guards", BATTLE.room === cp0 && BATTLE.wave === 1 &&
     BATTLE.enemies.length === 3 && BATTLE.enemies.every(e => e.type === "chaser"));
+  check("station not cleared while guards alive", !cp0.cleared);
   battleTick(0.6, session.worldPos, false);
   check("stand still auto-fires arrows", BATTLE.bullets.length > 0);
   BATTLE.bullets.length = 0; BATTLE.fireCd = 0;
@@ -241,22 +245,40 @@ const test = `
   BATTLE.bullets.length = 0; BATTLE.fireCd = 0;
   for (let i = 0; i < 12; i++) battleTick(0.1, session.worldPos, false);
   check("arrow damages enemy", e0.hp < hp0 || e0.hp <= 0);
-  BATTLE.enemies.forEach(e => { e.hp = 1; });
+  BATTLE.enemies.forEach(e => { e.hp = 1; e.x = session.worldPos.x + 8; e.y = session.worldPos.y; });
   BATTLE.bullets.length = 0; BATTLE.fireCd = 0;
   const kills0 = BATTLE.kills;
-  for (let i = 0; i < 10; i++) battleTick(0.1, session.worldPos, false);
-  check("kill grants exp/kills", BATTLE.kills > kills0 && BATTLE.exp + (BATTLE.level - 1) * 10 > 0);
-  BATTLE.exp = BATTLE.expNext;
-  battleTick(0.05, session.worldPos, false);
-  check("levelup pauses with 3 choices", BATTLE.state === "levelup" && BATTLE.choices.length === 3);
-  const snap = JSON.stringify(BATTLE.player);
-  check("applySkill applies an effect and resumes", (() => {
+  for (let i = 0; i < 30; i++) battleTick(0.1, session.worldPos, false);
+  check("clearing room checks the checkpoint", BATTLE.enemies.length === 0 &&
+    cp0.cleared === true && BATTLE.room === null && BATTLE.kills > kills0);
+  while (BATTLE.state === "levelup") applySkill(0);
+  check("levelup grants 3 choices, skill applies", (() => {
+    BATTLE.exp = BATTLE.expNext;
+    battleTick(0.05, session.worldPos, false);
+    if (BATTLE.state !== "levelup" || BATTLE.choices.length !== 3) return false;
+    const snap = JSON.stringify(BATTLE.player);
     const ok = applySkill(0);
+    while (BATTLE.state === "levelup") applySkill(0);
     return ok && BATTLE.state === "fighting" && JSON.stringify(BATTLE.player) !== snap;
   })());
+  const cp1 = session.checkpoints[1];
+  session.worldPos = { x: cp1.localMeters.x - 5, y: cp1.localMeters.y };
+  battleTick(0.05, session.worldPos, false);
+  check("second station mixes in shooters", BATTLE.room === cp1 && BATTLE.wave === 2 &&
+    BATTLE.enemies.some(e => e.type === "shooter"));
+  BATTLE.enemies.forEach(e => { e.hp = 1; e.x = session.worldPos.x + 8; e.y = session.worldPos.y; });
+  BATTLE.bullets.length = 0; BATTLE.fireCd = 0;
+  for (let i = 0; i < 30; i++) battleTick(0.1, session.worldPos, false);
+  check("second station cleared", cp1.cleared === true && BATTLE.enemies.length === 0);
+  while (BATTLE.state === "levelup") applySkill(0);
+  const cp2 = session.checkpoints[2];
+  session.worldPos = { x: cp2.localMeters.x, y: cp2.localMeters.y };
+  battleTick(0.05, session.worldPos, false);
+  check("final station is a boss room", BATTLE.wave === 3 &&
+    BATTLE.enemies.some(e => e.type === "boss") && BATTLE.enemies.length === 4);
   BATTLE.enemies = []; BATTLE.ebullets = []; BATTLE.bullets = [];
   BATTLE.enemies.push({ id: 9001, type: "chaser", x: BATTLE._px, y: BATTLE._py, hp: 999, maxHp: 999,
-    fireT: 0, dashT: 0, dashVx: 0, dashVy: 0, dashLeft: 0, hitCd: 0, sign: 1 });
+    fireT: 0, dashT: 0, dashVx: 0, dashVy: 0, dashLeft: 0, hitCd: 0, flash: 0, sign: 1 });
   battleTick(0.1, session.worldPos, false);
   check("enemy contact damages player", BATTLE.player.hp < 100);
   BATTLE.player.hp = 5;
