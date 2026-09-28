@@ -335,6 +335,29 @@ const test = `
     return Progress.has("night_owl") && !Progress.has("rain_runner");
   })());
 
+  /* ---- 结算星级（3★=均配速≤5'30"，2★≤6'30"，战斗按波次） ---- */
+  check("rating 3-star fast pace", (() => {
+    const s = { recordedDist: 2000, duration: 640, campus: CAMPUS, mode: "free" };
+    return Progress.rateRun(s, null) === 3;
+  })());
+  check("rating 2-star mid pace", (() => {
+    const s = { recordedDist: 2000, duration: 760, campus: CAMPUS, mode: "free" };
+    return Progress.rateRun(s, null) === 2;
+  })());
+  check("rating 1-star slow pace", (() => {
+    const s = { recordedDist: 2000, duration: 1000, campus: CAMPUS, mode: "free" };
+    return Progress.rateRun(s, null) === 1;
+  })());
+  check("rating 0-star run too short", (() => {
+    const s = { recordedDist: 500, duration: 120, campus: CAMPUS, mode: "free" };
+    return Progress.rateRun(s, null) === 0;
+  })());
+  check("rating battle by wave", (() => {
+    const cases = [[{ wave: 5, kills: 1 }, 3], [{ wave: 3, kills: 1 }, 2],
+                   [{ wave: 1, kills: 1 }, 1], [{ wave: 0, kills: 0 }, 0]];
+    return cases.every(([b, exp]) => Progress.rateRun({ recordedDist: 0, duration: 0, campus: CAMPUS, mode: "battle" }, b) === exp);
+  })());
+
   /* 恢复默认状态 */
   session.setMode("checkpoint"); resetRun();
 

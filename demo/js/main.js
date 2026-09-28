@@ -6,19 +6,33 @@ const keys={};
 window.addEventListener("keydown",e=>{
   keys[e.code]=true;
   Sfx.unlock();
+  /* 开始菜单：1-4 选模式，回车开始 */
+  if(isStartVisible()){
+    if(e.code==="Digit1"){ START_OPTS.mode="checkpoint"; buildStartPanel(); }
+    else if(e.code==="Digit2"){ START_OPTS.mode="tour"; buildStartPanel(); }
+    else if(e.code==="Digit3"){ START_OPTS.mode="free"; buildStartPanel(); }
+    else if(e.code==="Digit4"){ START_OPTS.mode="battle"; buildStartPanel(); }
+    else if(e.code==="Enter"||e.code==="Space"){ e.preventDefault(); startFromMenu(); }
+    return;
+  }
   if(e.code==="KeyM"){ showToast(Sfx.toggle()?"🔇 音效已静音":"🔊 音效已开启"); return; }
+  if(e.code==="KeyP"||e.code==="Escape"){ togglePause(); return; }
   /* 战斗升级三选一：1/2/3 选牌（优先于模式切换） */
   if(BATTLE.state==="levelup"){
     if(e.code==="Digit1"){ applySkill(0); return; }
     if(e.code==="Digit2"){ applySkill(1); return; }
     if(e.code==="Digit3"){ applySkill(2); return; }
   }
-  if(e.code==="Space"){ e.preventDefault(); boot.autopilot=!boot.autopilot; }
-  if(e.code==="KeyT"){ resetRun(); }
-  if(e.code==="Digit1"){ session.setMode("checkpoint"); resetRun(); }
-  if(e.code==="Digit2"){ session.setMode("tour"); resetRun(); }
-  if(e.code==="Digit3"){ session.setMode("free"); resetRun(); }
-  if(e.code==="Digit4"){ session.setMode("battle"); resetRun(); }
+  if(e.code==="Space"){ e.preventDefault(); boot.autopilot=!boot.autopilot; syncAutoBtn(); }
+  if(e.code==="KeyT"){
+    /* 结算弹层开着时 T=再来一局，否则 T=结算 */
+    if(isResultVisible()){ hideResult(); resetRun(); }
+    else showResult(session.mode==="battle"?"战 斗 结 束":"本 局 结 算");
+  }
+  if(e.code==="Digit1"){ hideResult(); session.setMode("checkpoint"); resetRun(); }
+  if(e.code==="Digit2"){ hideResult(); session.setMode("tour"); resetRun(); }
+  if(e.code==="Digit3"){ hideResult(); session.setMode("free"); resetRun(); }
+  if(e.code==="Digit4"){ hideResult(); session.setMode("battle"); resetRun(); }
   if(e.code==="Equal"||e.code==="NumpadAdd"){ cam.zoom=Math.min(CAM_MAX,cam.zoom*1.18); }
   if(e.code==="Minus"||e.code==="NumpadSubtract"){ cam.zoom=Math.max(CAM_MIN,cam.zoom/1.18); }
 });
@@ -84,9 +98,14 @@ function resetRun(){
   cam.x=session.worldPos.x; cam.y=session.worldPos.y;
 }
 
+function syncAutoBtn(){
+  const b=document.getElementById("mbAuto");
+  if(b) b.classList.toggle("on", !!boot.autopilot);
+}
+
 function init(){
   session = new RunSession(frame, CAMPUS, 20260924);
-  boot = { autopilot:false, speedMul:6, targetSpeed:2.94, lastTime:performance.now()/1000 };
+  boot = { autopilot:false, paused:true, speedMul:6, targetSpeed:2.94, lastTime:performance.now()/1000 };
 
   resetRun();
 
@@ -103,6 +122,20 @@ function init(){
   btns.forEach(b=>b.addEventListener("click",()=>{ Sfx.play("click"); setSpeed(+b.dataset.s); }));
   setSpeed(6);
 
+  /* 弹层 / 快捷按钮 */
+  $("startBtn").addEventListener("click", startFromMenu);
+  $("deadRetry").addEventListener("click", ()=>{ Sfx.play("click"); hideResult(); resetRun(); });
+  $("deadMenu").addEventListener("click", ()=>{ Sfx.play("click"); hideResult(); showStart(); });
+  $("pauseResume").addEventListener("click", ()=>togglePause(false));
+  $("pauseMenu").addEventListener("click", ()=>{ togglePause(false); showStart(); });
+  $("mbPause").addEventListener("click", ()=>togglePause());
+  $("mbAuto").addEventListener("click", ()=>{ boot.autopilot=!boot.autopilot; syncAutoBtn(); Sfx.play("click"); });
+  const sb=$("mbSprint");
+  sb.addEventListener("pointerdown",e=>{ e.preventDefault(); keys.ShiftRightMobile=true; });
+  const up=()=>{ keys.ShiftRightMobile=false; };
+  sb.addEventListener("pointerup",up); sb.addEventListener("pointercancel",up); sb.addEventListener("pointerleave",up);
+
+  showStart();
   requestAnimationFrame(loop);
 }
 
@@ -114,34 +147,36 @@ function loop(nowMs){
 
   const wallMs = Date.now();
   const battleMode = session.mode==="battle";
-  /* 战斗模式永远实时（1×），其他模式保持演示加速 */
-  const dt = battleMode ? realDt : realDt * boot.speedMul;
-  ENV.tick(realDt, battleMode?1:boot.speedMul);
-  updateEnvFx(realDt);
+  /* 战斗模式永远实时（1×），其他模式保持演示加速；暂停/菜单时冻结世界 */
+  if(!boot.paused){
+    const dt = battleMode ? realDt : realDt * boot.speedMul;
+    ENV.tick(realDt, battleMode?1:boot.speedMul);
+    updateEnvFx(realDt);
 
-  let moving=false;
-  if(battleMode && BATTLE.state==="fighting"){
-    const dir=readInput();
-    const sprint = !!(keys.ShiftLeft||keys.ShiftRight);
-    moving = dir.x!==0||dir.y!==0;
-    session.tick(dt, wallMs, dir, boot.targetSpeed*BATTLE.player.moveMul, sprint);
-    battleTick(dt, session.worldPos, moving);
-    if(BATTLE.state==="levelup" && _prevBState!=="levelup") Sfx.play("levelup");
-    if(BATTLE.state==="dead" && _prevBState!=="dead") Sfx.play("death");
-    if(BATTLE.player.hp<_prevHp) Sfx.play("hurt");
-    if(BATTLE.bullets.length>_prevBullets && now-_lastShootT>0.08){ Sfx.play("shoot"); _lastShootT=now; }
-    _prevBState=BATTLE.state; _prevBullets=BATTLE.bullets.length; _prevHp=BATTLE.player.hp;
-  } else if(!battleMode){
-    const dir=readInput();
-    moving = dir.x!==0||dir.y!==0;
-    const sprint = !!(keys.ShiftLeft||keys.ShiftRight);
-    if(boot.autopilot) session.tickAutopilot(dt, wallMs, boot.targetSpeed);
-    else session.tick(dt, wallMs, dir, boot.targetSpeed, sprint);
+    let moving=false;
+    if(battleMode && BATTLE.state==="fighting"){
+      const dir=readInput();
+      const sprint = !!(keys.ShiftLeft||keys.ShiftRight||keys.ShiftRightMobile);
+      moving = dir.x!==0||dir.y!==0;
+      session.tick(dt, wallMs, dir, boot.targetSpeed*BATTLE.player.moveMul, sprint);
+      battleTick(dt, session.worldPos, moving);
+      if(BATTLE.state==="levelup" && _prevBState!=="levelup") Sfx.play("levelup");
+      if(BATTLE.state==="dead" && _prevBState!=="dead") Sfx.play("death");
+      if(BATTLE.player.hp<_prevHp) Sfx.play("hurt");
+      if(BATTLE.bullets.length>_prevBullets && now-_lastShootT>0.08){ Sfx.play("shoot"); _lastShootT=now; }
+      _prevBState=BATTLE.state; _prevBullets=BATTLE.bullets.length; _prevHp=BATTLE.player.hp;
+    } else if(!battleMode){
+      const dir=readInput();
+      moving = dir.x!==0||dir.y!==0;
+      const sprint = !!(keys.ShiftLeft||keys.ShiftRight||keys.ShiftRightMobile);
+      if(boot.autopilot) session.tickAutopilot(dt, wallMs, boot.targetSpeed);
+      else session.tick(dt, wallMs, dir, boot.targetSpeed, sprint);
+    }
+    /* 升级选牌 / 倒下 / 结算：世界冻结，等待选择 */
+
+    _dustT-=realDt;
+    if(moving && _dustT<=0){ spawnDust(session.worldPos.x, session.worldPos.y); _dustT=0.12; }
   }
-  /* 升级选牌 / 倒下：画面冻结，等待选择或 T 重开 */
-
-  _dustT-=realDt;
-  if(moving && _dustT<=0){ spawnDust(session.worldPos.x, session.worldPos.y); _dustT=0.12; }
 
   const k=1-Math.exp(-realDt*6);
   cam.x += (session.worldPos.x-cam.x)*k;

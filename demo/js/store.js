@@ -106,6 +106,15 @@ const Progress = {
     }
   },
 
+  /* 星级：3★=均配速≤5'30"；战斗按波次；不足成局 0★ */
+  rateRun(session, battle) {
+    if (battle) return battle.wave >= 5 ? 3 : (battle.wave >= 3 ? 2 : (battle.kills > 0 ? 1 : 0));
+    const dist = session.recordedDist, dur = session.duration;
+    if (dist < 1000 || dur < 60) return 0;
+    const pace = 1000 * dur / dist;
+    return pace <= 330 ? 3 : (pace <= 390 ? 2 : 1);
+  },
+
   /* resetRun 前结算上一局：成就 / 每校园×模式最佳记录 */
   finishRun(session, battle) {
     const dist = session.recordedDist, dur = session.duration;

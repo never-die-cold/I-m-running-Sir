@@ -31,10 +31,11 @@ function _nextToast(){
 }
 Progress.onToast=(text,kind)=>{ showToast(text,kind); Sfx.play(kind==="rec"?"record":"ach"); };
 
-/* 打卡/巡礼发现的音效与彩带（按帧差分触发） */
-let _lastCleared=0, _lastLm=0;
+/* 打卡/巡礼发现的音效与彩带（按帧差分触发）+ 定向全清自动结算 */
+let _lastCleared=0, _lastLm=0, _resultShownRun=false;
 function observePickups(session){
   const cleared=session.checkpoints.filter(c=>c.cleared).length;
+  if(cleared===0) _resultShownRun=false;
   if(cleared>_lastCleared){
     Sfx.play("checkpoint");
     spawnConfetti(session.worldPos.x, session.worldPos.y);
@@ -46,6 +47,11 @@ function observePickups(session){
     spawnConfetti(session.worldPos.x, session.worldPos.y);
   }
   _lastLm=lm;
+  if(session.mode==="checkpoint" && session.checkpoints.length>0 &&
+     cleared===session.checkpoints.length && !_resultShownRun && !isResultVisible()){
+    _resultShownRun=true;
+    showResult("打卡完成！");
+  }
 }
 
 function fmtPace(sec){
@@ -80,16 +86,114 @@ function refreshBattleOverlays(){
   } else lvl.style.display="none";
 
   if(session.mode==="battle" && BATTLE.state==="dead"){
-    $("deadStats").innerHTML=
-      "存活波次 <b>"+BATTLE.wave+"</b> · 击杀 <b>"+BATTLE.kills+"</b> · 等级 <b>Lv."+BATTLE.level+"</b><br>"+
-      "本次里程 <b>"+(session.recordedDist/1000).toFixed(2)+" km</b> · 用时 <b>"+fmtDur(session.duration)+"</b>";
-    dead.style.display="flex";
-  } else dead.style.display="none";
+    if(!isResultVisible()) showResult("你 倒 下 了");
+  }
 }
 function _skillLvTag(id){
   const p=BATTLE.player;
   const cur={multi:p.arrows,pierce:p.pierce,ricochet:p.ricochet,nova:p.nova}[id];
   return cur!==undefined?("当前 "+cur+" 级"):"";
+}
+
+/* ============================================================
+   开始菜单 / 暂停 / 结算（星级：3★=均配速≤5'30"）
+   ============================================================ */
+const START_OPTS={ mode:"checkpoint", cpCount:3, pace:2.94 };
+const PACE_OPTS=[
+  { v:2.56, n:"轻松 6'30\"" },
+  { v:2.94, n:"标准 5'40\"" },
+  { v:3.53, n:"竞速 4'43\"" }
+];
+function isStartVisible(){ const el=$("startOverlay"); return !!(el&&el.style.display==="flex"); }
+function isResultVisible(){ const el=$("deadOverlay"); return !!(el&&el.style.display==="flex"); }
+
+function buildStartPanel(){
+  if(typeof document==="undefined"||!document.createElement) return;   // headless 沙箱静默
+  const cc=$("campusChips"); cc.innerHTML="";
+  [{n:"南京大学·苏州校区",d:"可选 · 太湖科学城",ok:true,on:true},
+   {n:"鼓楼校区",d:"敬请期待",ok:false,on:false},
+   {n:"仙林校区",d:"敬请期待",ok:false,on:false}].forEach(c=>{
+    const d=document.createElement("div");
+    d.className="campusCard"+(c.ok?"":" off")+(c.on?" on":"");
+    d.innerHTML="<b>"+c.n+"</b><i>"+c.d+"</i>";
+    cc.appendChild(d);
+  });
+  const mc=$("modeChips"); mc.innerHTML="";
+  [["checkpoint","定向打卡"],["tour","地标巡礼"],["free","自由跑"],["battle","狩猎战场"]].forEach(([id,n])=>{
+    const d=document.createElement("div");
+    d.className="chip"+(START_OPTS.mode===id?" on":"");
+    d.textContent=n;
+    d.addEventListener("click",()=>{ START_OPTS.mode=id; Sfx.play("click"); buildStartPanel(); });
+    mc.appendChild(d);
+  });
+  const pc=$("cpChips"); pc.innerHTML="";
+  [3,5,8].forEach(n=>{
+    const d=document.createElement("div");
+    d.className="chip"+(START_OPTS.cpCount===n?" on":"");
+    d.textContent=n+" 个";
+    d.addEventListener("click",()=>{ START_OPTS.cpCount=n; Sfx.play("click"); buildStartPanel(); });
+    pc.appendChild(d);
+  });
+  const pe=$("paceChips"); pe.innerHTML="";
+  PACE_OPTS.forEach(p=>{
+    const d=document.createElement("div");
+    d.className="chip"+(START_OPTS.pace===p.v?" on":"");
+    d.textContent=p.n;
+    d.addEventListener("click",()=>{ START_OPTS.pace=p.v; Sfx.play("click"); buildStartPanel(); });
+    pe.appendChild(d);
+  });
+  const P=Progress.data;
+  const bestLines=Object.entries(P.best||{}).map(([k,b])=>{
+    const seg=k.split(":"), cid=seg[0], mode=seg[1];
+    if(mode==="battle") return cid+" 狩猎：最佳 "+(b.kills||0)+" 杀 / "+(b.wave||0)+" 波";
+    return cid+" "+mode+"：最佳 "+((b.distM||0)/1000).toFixed(2)+" km"+
+      (b.bestPace?" · 均配速 "+fmtPace(b.bestPace):"");
+  });
+  $("startRecords").innerHTML=
+    "成就 <b>"+P.ach.length+" / "+ACH_DEFS.length+"</b> · 累计里程 <b>"+
+    ((P.totalDistM||0)/1000).toFixed(2)+" km</b> · 累计击杀 <b>"+(P.totalKills||0)+"</b>"+
+    (bestLines.length?"<br>"+bestLines.join("<br>"):"<br>暂无记录，开跑吧！");
+}
+function showStart(){ buildStartPanel(); $("startOverlay").style.display="flex"; boot.paused=true; }
+function hideStart(){ $("startOverlay").style.display="none"; }
+function startFromMenu(){
+  hideStart();
+  boot.paused=false;
+  $("pauseOverlay").style.display="none";
+  session.setMode(START_OPTS.mode);
+  boot.cpCount=START_OPTS.cpCount;
+  boot.targetSpeed=START_OPTS.pace;
+  resetRun();
+  Sfx.play("click");
+}
+function togglePause(force){
+  if(isStartVisible()||isResultVisible()) return;
+  boot.paused = force!==undefined?force:!boot.paused;
+  $("pauseOverlay").style.display=boot.paused?"flex":"none";
+  Sfx.play("click");
+}
+function starsText(n){ return "★★★".slice(0,n)+"<i>"+"★★★".slice(0,3-n)+"</i>"; }
+function showResult(title){
+  Progress.finishRun(session, session.mode==="battle"?BATTLE:null);
+  const s=Progress.rateRun(session, session.mode==="battle"?BATTLE:null);
+  $("deadTitle").textContent=title;
+  $("deadStars").innerHTML=starsText(s);
+  if(session.mode==="battle"){
+    $("deadStats").innerHTML=
+      "存活波次 <b>"+BATTLE.wave+"</b> · 击杀 <b>"+BATTLE.kills+"</b> · 等级 <b>Lv."+BATTLE.level+"</b><br>"+
+      "本次里程 <b>"+(session.recordedDist/1000).toFixed(2)+" km</b> · 用时 <b>"+fmtDur(session.duration)+"</b>";
+  } else {
+    const pace=session.duration>1?1000*session.duration/Math.max(1,session.recordedDist):0;
+    $("deadStats").innerHTML=
+      "里程 <b>"+(session.recordedDist/1000).toFixed(2)+" km</b> · 用时 <b>"+fmtDur(session.duration)+
+      "</b> · 均配速 <b>"+(pace>0?fmtPace(pace):"--")+"</b>";
+  }
+  $("deadOverlay").style.display="flex";
+  boot.paused=true;
+}
+function hideResult(){
+  $("deadOverlay").style.display="none";
+  boot.paused=false;
 }
 
 function updateHud(){

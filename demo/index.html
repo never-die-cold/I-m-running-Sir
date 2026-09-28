@@ -67,6 +67,41 @@
     border-radius:4px; padding:7px 16px; font-size:12.5px; letter-spacing:.06em;
     box-shadow:0 6px 20px rgba(0,0,0,.5); opacity:0; transition:opacity .3s; white-space:nowrap; }
   .toastItem.rec { border-color:#3fd6ff; color:#bfe9ff; }
+
+  .overlay .stars { font-size:26px; letter-spacing:6px; color:#f9c63a; margin:4px 0 10px; }
+  .overlay .stars i { font-style:normal; color:#3a4644; }
+
+  /* 开始菜单 */
+  #startOverlay .card { max-width:660px; text-align:left; }
+  #startOverlay h1 { color:#f9c63a; font-size:22px; letter-spacing:.3em; text-align:center; margin-bottom:2px; }
+  #startOverlay .sub { text-align:center; color:#7d8a86; font-size:11px; letter-spacing:.2em; margin-bottom:14px; }
+  .secTitle { font-size:10px; color:#f9c63a; letter-spacing:.16em; margin:10px 0 6px; font-weight:700; }
+  .chips { display:flex; gap:8px; flex-wrap:wrap; }
+  .campusCard { flex:1; min-width:150px; border:1px solid #3a4644; background:#141a1b; border-radius:5px;
+    padding:10px 12px; cursor:pointer; color:#eef3f1; }
+  .campusCard:hover { border-color:#8b5fbf; }
+  .campusCard.on { border-color:#f9c63a; background:#1c1e14; }
+  .campusCard b { display:block; font-size:13px; margin-bottom:3px; }
+  .campusCard i { display:block; font-style:normal; font-size:10.5px; color:#7d8a86; }
+  .campusCard.off { opacity:.45; cursor:not-allowed; }
+  .chip { padding:6px 12px; background:#141a1b; border:1px solid #3a4644; border-radius:4px;
+    color:#9aa7a3; font-size:12px; cursor:pointer; }
+  .chip:hover { border-color:#8b5fbf; }
+  .chip.on { background:#f9c63a; color:#10130f; border-color:#f9c63a; font-weight:700; }
+  #startRecords { margin-top:10px; font-size:11.5px; color:#8d9a96; line-height:1.8;
+    background:rgba(0,0,0,.35); border-radius:4px; padding:8px 10px; }
+  #startRecords b { color:#eef3f1; }
+  #startBtn { display:block; width:100%; margin-top:14px; padding:10px; background:#f9c63a; color:#10130f;
+    border:0; border-radius:5px; font-size:15px; font-weight:800; letter-spacing:.4em; cursor:pointer; }
+  #startBtn:hover { filter:brightness(1.1); }
+
+  /* 移动端/快捷按钮 */
+  #mbtns { position:absolute; right:12px; bottom:52px; display:flex; flex-direction:column; gap:6px; z-index:5; }
+  #mbtns button { width:52px; height:52px; border-radius:50%; border:1px solid #3a4644;
+    background:rgba(9,13,15,.8); color:#cfd8d5; font-size:12px; font-weight:700; cursor:pointer;
+    touch-action:none; user-select:none; -webkit-user-select:none; }
+  #mbtns button:active { background:#f9c63a; color:#10130f; }
+  #mbtns button.on { background:#3fd6ff; color:#10130f; border-color:#3fd6ff; }
 </style>
 </head>
 <body>
@@ -120,7 +155,8 @@
     <span class="kbd">Shift</span> 冲刺 ·
     <span class="kbd">1-4</span> 模式(4=战斗) ·
     <span class="kbd">M</span> 静音 ·
-    <span class="kbd">T</span> 重置 ·
+    <span class="kbd">P</span> 暂停 ·
+    <span class="kbd">T</span> 结算 ·
     <span class="kbd">滚轮</span> 缩放
   </div>
 </div>
@@ -145,10 +181,48 @@
 
 <div class="overlay" id="deadOverlay">
   <div class="card">
-    <h2>你 倒 下 了</h2>
+    <h2 id="deadTitle">你 倒 下 了</h2>
+    <div class="stars" id="deadStars"></div>
     <div id="deadStats"></div>
-    <p>按 <span class="kbd">T</span> 重新开始</p>
+    <p>
+      <button class="chip" id="deadRetry">再来一局 (T)</button>
+      <button class="chip" id="deadMenu">返回菜单</button>
+    </p>
   </div>
+</div>
+
+<div class="overlay" id="pauseOverlay">
+  <div class="card">
+    <h2>已 暂 停</h2>
+    <p><span class="kbd">P</span> / <span class="kbd">Esc</span> 继续</p>
+    <p>
+      <button class="chip" id="pauseResume">继续</button>
+      <button class="chip" id="pauseMenu">返回菜单</button>
+    </p>
+  </div>
+</div>
+
+<div class="overlay" id="startOverlay">
+  <div class="card">
+    <h1>校 园 跑</h1>
+    <div class="sub">CAMPUS RUN · 虚拟 GPS · 弓箭手式战斗</div>
+    <div class="secTitle">CAMPUS 校园</div>
+    <div class="chips" id="campusChips"></div>
+    <div class="secTitle">MODE 模式</div>
+    <div class="chips" id="modeChips"></div>
+    <div class="secTitle">CHECKPOINTS 打卡点（定向打卡）</div>
+    <div class="chips" id="cpChips"></div>
+    <div class="secTitle">PACE 目标配速</div>
+    <div class="chips" id="paceChips"></div>
+    <div id="startRecords"></div>
+    <button id="startBtn">开 始</button>
+  </div>
+</div>
+
+<div id="mbtns">
+  <button id="mbPause" title="暂停 (P)">⏸</button>
+  <button id="mbAuto" title="自动驾驶 (空格)">自动</button>
+  <button id="mbSprint" title="冲刺 (Shift)">冲刺</button>
 </div>
 
 <script src="js/geo.js"></script>
