@@ -1,8 +1,35 @@
 "use strict";
 /* ============================================================
-   ui.js —— HUD 文案 / 格式化
+   ui.js —— HUD 文案 / 格式化 / toast
    ============================================================ */
 const $=id=>document.getElementById(id);
+
+/* toast 队列（成就 / 新纪录）；headless 沙箱无 DOM/setTimeout，静默跳过 */
+const _toastQ=[];
+function showToast(text,kind){
+  try{
+    if(typeof document==="undefined"||!document.createElement||typeof setTimeout==="undefined") return;
+    _toastQ.push({text,kind:kind||"ach"});
+    if(_toastQ.length===1) _nextToast();
+  }catch(e){}
+}
+function _nextToast(){
+  const box=$("toast");
+  if(!box|| !_toastQ.length) return;
+  const t=_toastQ[0];
+  const el=document.createElement("div");
+  el.className="toastItem"+(t.kind==="rec"?" rec":"");
+  el.textContent=t.text;
+  box.appendChild(el);
+  requestAnimationFrame(()=>{ el.style.opacity="1"; });
+  setTimeout(()=>{ el.style.opacity="0"; },2600);
+  setTimeout(()=>{
+    el.remove();
+    _toastQ.shift();
+    _nextToast();
+  },3100);
+}
+Progress.onToast=(text,kind)=>showToast(text,kind);
 
 function fmtPace(sec){
   if(!sec||!isFinite(sec)||sec<=0) return "--'--\"";
@@ -115,6 +142,7 @@ function updateHud(){
   refreshBattleOverlays();
 
   $("vMode").textContent = boot.autopilot?"自动驾驶中":"手动模式";
+  Progress.observe(session, inBattle?BATTLE:null);
   $("json").textContent = JSON.stringify({
     v:1, seq:s.feed.seq, active:true, running:s.isRunning,
     distanceMeters:+s.recordedDist.toFixed(2), durationSeconds:+s.duration.toFixed(1),

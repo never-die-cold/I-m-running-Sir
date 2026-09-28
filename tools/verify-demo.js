@@ -54,6 +54,7 @@ const sandbox = {
   console,
   Math, Date, JSON, Object, Array, String, Number, Boolean, Error, isFinite, isNaN,
   parseFloat, parseInt, performance: { now: () => Date.now() },
+  process: { exitCode: 0 },
   requestAnimationFrame: noop,
   document: {
     getElementById: makeEl,
@@ -261,6 +262,39 @@ const test = `
   BATTLE.player.hp = 5;
   battleTick(1.0, session.worldPos, false);
   check("player dies at 0 hp", BATTLE.state === "dead" && BATTLE.player.hp === 0);
+
+  /* ---- 存储 / 成就 / 记录（headless 无 localStorage，自动降级内存） ---- */
+  check("store falls back gracefully (no crash)", typeof Store.persistent() === "boolean");
+  check("achievement defs unique (>=10)", (() => {
+    const ids = ACH_DEFS.map(a => a.id);
+    return ids.length >= 10 && new Set(ids).size === ids.length;
+  })());
+  check("progress unlock once-only", (() => {
+    const a0 = Progress.data.ach.length;
+    const first = Progress.unlock("first_cp");
+    const second = Progress.unlock("first_cp");
+    return first === true && second === false && Progress.data.ach.length === a0 + 1 && Progress.has("first_cp");
+  })());
+  check("progress accumulates distance/kills", (() => {
+    Progress.finishRun({ recordedDist: 0, duration: 0, campus: CAMPUS, mode: "free" }, null);
+    const d0 = Progress.data.totalDistM, k0 = Progress.data.totalKills;
+    const mk = (dist, dur, kills) => ({ recordedDist: dist, duration: dur, checkpoints: [],
+      campus: CAMPUS, mode: "free", landmarksFound: [], sprinting: false });
+    Progress.observe(mk(500, 10, 0), { kills: 0, wave: 1, level: 1 });   // 建立基线
+    Progress.observe(mk(900, 20, 0), { kills: 3, wave: 1, level: 1 });   // +400m / +3 杀
+    return Progress.data.totalDistM > d0 && Progress.data.totalKills >= k0 + 3 &&
+      Progress.has("first_kill");
+  })());
+  check("pace500 unlocks on fast run", (() => {
+    Progress.finishRun({ recordedDist: 2000, duration: 580, campus: CAMPUS, mode: "checkpoint" }, null);
+    return Progress.has("pace500");
+  })());
+  check("best record per campus×mode", (() => {
+    Progress.finishRun({ recordedDist: 3500, duration: 1200, campus: CAMPUS, mode: "free" },
+      { kills: 7, wave: 2, level: 3 });
+    const b = Progress.data.best[CAMPUS.id + ":free"];
+    return !!b && b.distM === 3500 && b.kills === 7 && b.wave === 2;
+  })());
 
   /* 恢复默认状态 */
   session.setMode("checkpoint"); resetRun();

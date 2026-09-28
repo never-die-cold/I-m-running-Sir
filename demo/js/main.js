@@ -69,6 +69,7 @@ const frame = new LocalFrame(ORIGIN);
 let session, boot;
 
 function resetRun(){
+  if (typeof Progress !== "undefined") Progress.finishRun(session, session.mode==="battle"?BATTLE:null);
   session.resetToRouteStart();
   if(session.mode==="checkpoint") session.spawnCheckpoints(boot.cpCount||3, 80, 120, 0.15);
   else session.checkpoints=[];

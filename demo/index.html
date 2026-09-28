@@ -60,6 +60,13 @@
   .overlay .skcard i { display:block; font-style:normal; color:#7d8a86; font-size:10.5px; margin-top:2px; }
   .overlay p { color:#8d9a96; font-size:11.5px; margin-top:10px; }
   #deadStats { color:#eef3f1; font-size:13px; line-height:1.9; }
+
+  #toast { position:absolute; left:50%; bottom:84px; transform:translateX(-50%);
+    display:flex; flex-direction:column; align-items:center; gap:6px; z-index:20; pointer-events:none; }
+  .toastItem { background:rgba(9,13,15,.92); border:1px solid #f9c63a; color:#f9e9b8;
+    border-radius:4px; padding:7px 16px; font-size:12.5px; letter-spacing:.06em;
+    box-shadow:0 6px 20px rgba(0,0,0,.5); opacity:0; transition:opacity .3s; white-space:nowrap; }
+  .toastItem.rec { border-color:#3fd6ff; color:#bfe9ff; }
 </style>
 </head>
 <body>
@@ -124,6 +131,8 @@
   <button data-s="20">20×</button>
 </div>
 
+<div id="toast"></div>
+
 <div class="overlay" id="lvlOverlay">
   <div class="card">
     <h2>升 级 ！选 择 强 化</h2>
@@ -146,6 +155,7 @@
 <script src="js/campus-demo.js"></script>
 <script src="js/sim.js"></script>
 <script src="js/battle.js"></script>
+<script src="js/store.js"></script>
 <script src="js/render.js"></script>
 <script src="js/ui.js"></script>
 <script src="js/main.js"></script>
