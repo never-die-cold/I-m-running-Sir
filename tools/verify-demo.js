@@ -7,12 +7,24 @@ const vm = require("vm");
 const htmlPath = path.join(__dirname, "..", "demo", "index.html");
 const html = fs.readFileSync(htmlPath, "utf8");
 
-const blocks = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)];
-if (blocks.length === 0) {
-  console.error("FAIL: no <script> block found in demo/index.html");
+/* 按文档顺序收集 <script src> 外链与内联 <script>，拼接后执行 */
+const parts = [];
+const re = /<script\b([^>]*)>([\s\S]*?)<\/script>/g;
+let m;
+while ((m = re.exec(html))) {
+  const attrs = m[1] || "";
+  const src = /src="([^"]+)"/.exec(attrs);
+  if (src) {
+    parts.push(fs.readFileSync(path.join(path.dirname(htmlPath), src[1]), "utf8"));
+  } else if (m[2] && m[2].trim()) {
+    parts.push(m[2]);
+  }
+}
+if (parts.length === 0) {
+  console.error("FAIL: no script content found in demo/index.html");
   process.exit(1);
 }
-const source = blocks[blocks.length - 1][1];
+const source = parts.join("\n;\n");
 
 const noop = () => {};
 const ctxStub = new Proxy({}, {
