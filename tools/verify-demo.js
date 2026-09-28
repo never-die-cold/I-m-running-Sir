@@ -144,6 +144,87 @@ const test = `
   check("elapsedRealtimeNanos monotonic", fixes.every((f,i) => i===0 || f.elapsedRealtimeNanos > fixes[i-1].elapsedRealtimeNanos));
   check("accuracy in realistic range (3~20m)", fixes.every(f => f.accuracy > 3 && f.accuracy < 20));
 
+  /* ---- c4 玩法：模式 / 冲刺体力 / 导航 / 巡礼 / 自由跑 ---- */
+  check("mode switch rejects bad value", (() => {
+    try { session.setMode("nope"); return false; } catch (e) { return true; }
+  })());
+
+  /* 巡礼：地标半径触发（数据里 r 为 30~70m） */
+  session.setMode("tour"); resetRun();
+  check("tour mode has no checkpoints", session.checkpoints.length === 0);
+  check("tour: landmark found within its radius", (() => {
+    const lm = CAMPUS.landmarks[0];
+    session.worldPos = { x: lm.c.x + lm.r * 0.5, y: lm.c.y };
+    const n = session.checkLandmarks();
+    return n === 1 && session.landmarksFound.length === 1 && session.landmarksFound[0] === lm.n;
+  })());
+  check("tour: landmark NOT found outside radius", (() => {
+    const lm = CAMPUS.landmarks[1];
+    session.worldPos = { x: lm.c.x + lm.r + 30, y: lm.c.y };
+    return session.checkLandmarks() === 0;
+  })());
+
+  /* 自由跑：无打卡点，可正常跑 */
+  session.setMode("free"); resetRun();
+  check("free mode has no checkpoints", session.checkpoints.length === 0);
+  for (let i = 0; i < 10; i++) session.tick(1.0, Date.now(), { x: 1, y: 0 }, 2.94, false);
+  check("free mode runs without error", isFinite(session.recordedDist) && session.fixCount >= 5);
+
+  /* 导航目标 = 最近未打卡点 */
+  session.setMode("checkpoint"); resetRun();
+  session.tickAutopilot(1.0, Date.now(), 2.94);
+  const nt = session.navTarget;
+  check("nav target set after first fix", !!nt && !nt.cleared);
+  check("nav target is nearest uncleared checkpoint", (() => {
+    let bd = Infinity;
+    for (const c of session.checkpoints) {
+      const d = V.dist(session.worldPos, c.localMeters);
+      if (d < bd) bd = d;
+    }
+    return Math.abs(V.dist(session.worldPos, nt.localMeters) - bd) < 1e-6;
+  })());
+  check("nav target null after all cleared", (() => {
+    session.checkpoints.forEach(c => c.cleared = true);
+    session.tickAutopilot(1.0, Date.now(), 2.94);
+    return session.navTarget === null;
+  })());
+
+  /* 冲刺：体力 100 耗尽 ≤ 9s（12/s），期间配速不越界且快于常速 */
+  resetRun();
+  const sprintFixes = [];
+  let tSprint = 0, exhausted = false, sprintFlagSeen = false, seenFixes = session.fixCount;
+  while (tSprint < 30) {
+    session.tick(0.25, Date.now(), { x: 1, y: 0 }, 2.94, true);
+    tSprint += 0.25;
+    if (session.sprinting) sprintFlagSeen = true;
+    if (session.fixCount > seenFixes) { sprintFixes.push(session.lastFix); seenFixes = session.fixCount; }
+    if (session.stamina <= 0) { exhausted = true; break; }
+  }
+  check("sprint flag engages while sprinting", sprintFlagSeen);
+  check("sprint multiplier is 1.55", (() => {
+    session.sprinting = true; session.stamina = 50;
+    const m = session.sprintMul();
+    session.sprinting = false;
+    return m === 1.55;
+  })());
+  check("stamina drains to 0 within 9s of sprint", exhausted && tSprint <= 9.0);
+  check("sprint pace stays in legal band", sprintFixes.every(f =>
+    f.speed <= 0.3 || (1000 / f.speed >= 179 && 1000 / f.speed <= 541)));
+  check("sprint moves faster than normal pace", (() => {
+    const sp = sprintFixes.filter(f => f.speed > 0.3).map(f => f.speed);
+    if (sp.length < 3) return false;
+    const tail = sp.slice(-5);
+    const mean = tail.reduce((a, b) => a + b, 0) / tail.length;
+    return mean > 3.3;
+  })());
+
+  /* 非冲刺恢复：7/s，6s 应回到 ≥35 */
+  for (let i = 0; i < 24; i++) session.tick(0.25, Date.now(), { x: 1, y: 0 }, 2.94, false);
+  check("stamina regenerates when not sprinting (6s -> >=35)", session.stamina >= 35);
+
+  /* 恢复默认状态 */
+  session.setMode("checkpoint"); resetRun();
+
   /* ---- 校园数据完整性 ---- */
   check("campus: main loop length sane (2.5km~4.5km)", CAMPUS.mainRoute.length > 2500 && CAMPUS.mainRoute.length < 4500);
   check("campus: >=20 landmarks, unique names", (() => {

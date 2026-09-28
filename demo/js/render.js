@@ -37,7 +37,30 @@ function draw(){
   for(const b of CAMPUS.buildings) drawBuilding(b);
   drawLandmarks();
   drawCheckpoints();
+  drawNav();
   drawPlayer();
+}
+
+function drawNav(){
+  const t=session.navTarget;
+  if(!t) return;
+  const [px,py]=w2s(session.worldPos.x,session.worldPos.y);
+  const [tx,ty]=w2s(t.localMeters.x,t.localMeters.y);
+  ctx.save();
+  ctx.setLineDash([6*cam.zoom,5*cam.zoom]);
+  ctx.strokeStyle="rgba(139,95,191,.75)"; ctx.lineWidth=2;
+  ctx.beginPath(); ctx.moveTo(px,py); ctx.lineTo(tx,ty); ctx.stroke();
+  ctx.setLineDash([]);
+  const d=V.dist(session.worldPos,t.localMeters);
+  ctx.fillStyle="#c9b3e6"; ctx.font="10px sans-serif"; ctx.textAlign="center";
+  ctx.fillText(d>999?(d/1000).toFixed(2)+"km":Math.round(d)+"m", (px+tx)/2, (py+ty)/2-6);
+  if(tx<0||tx>W||ty<0||ty>H){
+    const cx=Math.max(24,Math.min(W-24,tx)), cy=Math.max(24,Math.min(H-24,ty));
+    ctx.translate(cx,cy); ctx.rotate(Math.atan2(ty-py,tx-px));
+    ctx.fillStyle="#8b5fbf";
+    ctx.beginPath(); ctx.moveTo(10,0); ctx.lineTo(-6,6); ctx.lineTo(-6,-6); ctx.closePath(); ctx.fill();
+  }
+  ctx.restore();
 }
 
 function drawWater(){

@@ -46,6 +46,22 @@ function updateHud(){
   $("vCp").textContent = cleared+" / "+s.checkpoints.length;
   $("vCpBar").style.width = (s.checkpoints.length? cleared/s.checkpoints.length*100:0)+"%";
 
+  const staPct=Math.round(s.stamina);
+  $("vSta").textContent=staPct+"%";
+  const staBar=$("vStaBar");
+  staBar.style.width=staPct+"%";
+  staBar.style.background = staPct>50?"#71e88a":(staPct>20?"#ffb84d":"#ff6b5a");
+
+  const modeName={checkpoint:"定向打卡",tour:"地标巡礼",free:"自由跑"}[s.mode]||s.mode;
+  $("vModeTag").textContent=modeName;
+  const totalLm=(s.campus.landmarks||[]).length;
+  if(s.mode==="tour"&&totalLm>0){
+    $("rowTour").style.display="";
+    $("vLm").textContent=s.landmarksFound.length+" / "+totalLm;
+  } else {
+    $("rowTour").style.display="none";
+  }
+
   $("vMode").textContent = boot.autopilot?"自动驾驶中":"手动模式";
   $("json").textContent = JSON.stringify({
     v:1, seq:s.feed.seq, active:true, running:s.isRunning,

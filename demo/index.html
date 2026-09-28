@@ -59,6 +59,8 @@
   <div class="row"><span class="k">TIME 用时</span><span class="v" id="vTime">00:00</span></div>
   <div class="row"><span class="k">SPEED 速度</span><span class="v" id="vSpeed">0.00 m/s</span></div>
   <div class="row"><span class="k">AVG PACE 均配速</span><span class="v" id="vAvg">--'--"</span></div>
+  <div class="row"><span class="k">STAMINA 体力</span><span class="v" id="vSta">100%</span></div>
+  <div class="bar"><i id="vStaBar" style="background:#71e88a"></i></div>
 </div>
 
 <div class="panel" id="pRight">
@@ -73,9 +75,11 @@
 </div>
 
 <div class="panel" id="pTop">
-  <h2>Checkpoints · 打卡点</h2>
+  <h2>Objective · 目标</h2>
+  <div class="row"><span class="k">MODE 模式</span><span class="v" id="vModeTag">定向打卡</span></div>
   <div class="row"><span class="k">已打卡</span><span class="v" id="vCp">0 / 0</span></div>
   <div class="bar"><i id="vCpBar"></i></div>
+  <div class="row" id="rowTour" style="display:none"><span class="k">地标巡礼</span><span class="v" id="vLm">0 / 0</span></div>
 </div>
 
 <div class="panel" id="pBottom">

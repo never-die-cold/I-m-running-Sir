@@ -7,6 +7,9 @@ window.addEventListener("keydown",e=>{
   keys[e.code]=true;
   if(e.code==="Space"){ e.preventDefault(); boot.autopilot=!boot.autopilot; }
   if(e.code==="KeyT"){ resetRun(); }
+  if(e.code==="Digit1"){ session.setMode("checkpoint"); resetRun(); }
+  if(e.code==="Digit2"){ session.setMode("tour"); resetRun(); }
+  if(e.code==="Digit3"){ session.setMode("free"); resetRun(); }
   if(e.code==="Equal"||e.code==="NumpadAdd"){ cam.zoom=Math.min(CAM_MAX,cam.zoom*1.18); }
   if(e.code==="Minus"||e.code==="NumpadSubtract"){ cam.zoom=Math.max(CAM_MIN,cam.zoom/1.18); }
 });
@@ -60,7 +63,10 @@ let session, boot;
 
 function resetRun(){
   session.resetToRouteStart();
-  session.spawnCheckpoints(3, 80, 120, 0.15);
+  if(session.mode==="checkpoint") session.spawnCheckpoints(boot.cpCount||3, 80, 120, 0.15);
+  else session.checkpoints=[];
+  session.landmarksFound=[];
+  session.stamina=100;
   session.startRun();
   boot.autopilot=false;
   cam.x=session.worldPos.x; cam.y=session.worldPos.y;
@@ -96,8 +102,9 @@ function loop(nowMs){
   const dt = realDt * boot.speedMul;
   const wallMs = Date.now();
 
+  const sprint = !!(keys.ShiftLeft||keys.ShiftRight);
   if(boot.autopilot) session.tickAutopilot(dt, wallMs, boot.targetSpeed);
-  else session.tick(dt, wallMs, readInput(), boot.targetSpeed);
+  else session.tick(dt, wallMs, readInput(), boot.targetSpeed, sprint);
 
   const k=1-Math.exp(-realDt*6);
   cam.x += (session.worldPos.x-cam.x)*k;

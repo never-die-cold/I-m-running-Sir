@@ -130,6 +130,13 @@ class RunSession {
     this.lastFix=this.feed.build(0,{x:0,y:0},{x:0,y:0},Date.now());
 
     this._lastTrueLocal=null; this._lastAccepted=null; this._fixAcc=0;
+
+    /* ---- 玩法状态（c4）---- */
+    this.mode="checkpoint";        // checkpoint | tour | free
+    this.stamina=100;              // 0..100
+    this.sprinting=false;
+    this.landmarksFound=[];        // 巡礼模式：已发现地标名
+    this.navTarget=null;           // 导航目标（最近未打卡点）
   }
 
   resetToRouteStart(){
@@ -144,6 +151,42 @@ class RunSession {
     this.feed.reset();
   }
   startRun(){ this.isRunning=true; this.duration=0; this._lastAccepted=null; this.feed.pace.reset(); }
+
+  /* ---- 玩法（c4）：模式 / 体力 / 导航 / 巡礼 ---- */
+  setMode(m){
+    if(!["checkpoint","tour","free"].includes(m)) throw new Error("bad mode: "+m);
+    this.mode=m;
+    if(m!=="checkpoint") this.checkpoints=[];
+    return this.mode;
+  }
+  sprintMul(){ return this.sprinting && this.stamina>0 ? 1.55 : 1.0; }
+  updateStamina(dt, sprintWanted, moving){
+    if(sprintWanted && moving && this.stamina>0){
+      this.stamina=Math.max(0, this.stamina-12*dt);
+      this.sprinting=true;
+    } else {
+      this.sprinting=false;
+      this.stamina=Math.min(100, this.stamina+7*dt);
+    }
+    return this.sprinting;
+  }
+  nearestUncleared(){
+    let best=null, bd=Infinity;
+    for(const cp of this.checkpoints){
+      if(cp.cleared) continue;
+      const d=V.dist(this.worldPos, cp.localMeters);
+      if(d<bd){ bd=d; best=cp; }
+    }
+    return best;
+  }
+  checkLandmarks(){
+    let n=0;
+    for(const lm of (this.campus.landmarks||[])){
+      if(this.landmarksFound.includes(lm.n)) continue;
+      if(V.dist(this.worldPos, lm.c)<=lm.r){ this.landmarksFound.push(lm.n); n++; }
+    }
+    return n;
+  }
 
   spawnCheckpoints(count, radius, minSep, startExclusion){
     const total=this.route.length;
@@ -171,11 +214,15 @@ class RunSession {
     return n;
   }
 
-  tick(dt, wallMs, direction, baseSpeed){
+  tick(dt, wallMs, direction, baseSpeed, sprintWanted){
     if(dt<0) dt=0;
     if(this.isRunning) this.duration += dt;
 
-    const ps=this.feed.pace.update(dt, this.isRunning?baseSpeed:0);
+    const moving=!!direction&&(direction.x!==0||direction.y!==0);
+    const sprint=this.updateStamina(dt, !!sprintWanted, moving);
+    const eff=baseSpeed*(sprint?1.55:1);
+
+    const ps=this.feed.pace.update(dt, this.isRunning?eff:0);
     const dir=V.norm(direction);
     const speed=(dir.x===0&&dir.y===0)?0:ps.applied;
 
@@ -220,6 +267,8 @@ class RunSession {
     }
 
     this.updateCheckpoints(fix);
+    if(this.mode==="tour") this.checkLandmarks();
+    this.navTarget=this.nearestUncleared();
     this.fixCount++;
     this.lastFix=fix;
     return fix;
