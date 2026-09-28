@@ -1,0 +1,51 @@
+# Unity
+unity/Library/
+unity/Temp/
+unity/Obj/
+unity/Build/
+unity/Builds/
+unity/Logs/
+unity/UserSettings/
+unity/MemoryCaptures/
+unity/Recordings/
+*.csproj
+*.unityproj
+*.sln
+*.suo
+*.user
+*.userprefs
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.mdb
+*.opendb
+*.VC.db
+
+# .NET
+bin/
+obj/
+out/
+
+# Android / Gradle
+android-plugin/**/build/
+android-plugin/**/.gradle/
+android-plugin/**/local.properties
+android-plugin/**/*.aar
+android-plugin/**/*.apk
+android-plugin/.idea/
+*.iml
+
+# Keystore / secrets
+*.jks
+*.keystore
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 本地私有内容（不随开源仓库分发）
+android-plugin/LpRunHook/
+.zcodeignore
+local/
