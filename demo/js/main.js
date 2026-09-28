@@ -53,6 +53,8 @@ function readInput(){
 /* ============================================================
    主循环
    ============================================================ */
+const CAMPUS = initCampus();
+const ORIGIN = CAMPUS.origin;
 const frame = new LocalFrame(ORIGIN);
 let session, boot;
 

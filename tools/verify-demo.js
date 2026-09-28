@@ -80,8 +80,10 @@ const test = `
   const active = session.checkpoints.filter(c => !c.cleared).length;
   check("checkpoint spawn excludes start region", session.checkpoints.length === 3 && session.checkpoints[0].routeDistance > 30);
 
+  const capDist = session.route.length * 1.02;
+
   let guard = 0;
-  while (session.recordedDist < 2500 && guard < 60000) {
+  while (session.recordedDist < capDist && guard < 90000) {
     guard++;
     const f = session.tickAutopilot(1.0, Date.now(), targetSpeed);
     fixes.push(f);
@@ -141,6 +143,34 @@ const test = `
   check("coordinate is a valid LatLon", nm.lat > -90 && nm.lat < 90 && nm.lon > -180 && nm.lon < 180);
   check("elapsedRealtimeNanos monotonic", fixes.every((f,i) => i===0 || f.elapsedRealtimeNanos > fixes[i-1].elapsedRealtimeNanos));
   check("accuracy in realistic range (3~20m)", fixes.every(f => f.accuracy > 3 && f.accuracy < 20));
+
+  /* ---- 校园数据完整性 ---- */
+  check("campus: main loop length sane (2.5km~4.5km)", CAMPUS.mainRoute.length > 2500 && CAMPUS.mainRoute.length < 4500);
+  check("campus: >=20 landmarks, unique names", (() => {
+    const ns = CAMPUS.landmarks.map(l => l.n);
+    return ns.length >= 20 && new Set(ns).size === ns.length;
+  })());
+  check("campus: buildings inside bounds", CAMPUS.buildings.every(b =>
+    b.c.x - b.s.x/2 > CAMPUS.bounds.minX && b.c.x + b.s.x/2 < CAMPUS.bounds.maxX &&
+    b.c.y - b.s.y/2 > CAMPUS.bounds.minY && b.c.y + b.s.y/2 < CAMPUS.bounds.maxY));
+  check("campus: buildings clear of roads", CAMPUS.buildings.every(b =>
+    !_nearAnyRoad(b.c.x, b.c.y, CAMPUS.roads, 2)));
+  check("campus: main route clear of buildings", (() => {
+    for (let d = 0; d < CAMPUS.mainRoute.length; d += 10) {
+      const p = CAMPUS.mainRoute.pointAt(d);
+      for (const b of CAMPUS.buildings) {
+        if (Math.abs(p.x - b.c.x) < b.s.x/2 + 2 && Math.abs(p.y - b.c.y) < b.s.y/2 + 2) return false;
+      }
+    }
+    return true;
+  })());
+  check("campus: trees generated, clear of roads", CAMPUS.trees.length > 40 &&
+    CAMPUS.trees.every(t => !_nearAnyRoad(t.x, t.y, CAMPUS.roads, 2)));
+  if (CAMPUS.id === "suzhou") {
+    check("campus(suzhou): origin near Taihu Science City", Math.abs(CAMPUS.origin.lat - 31.36) < 0.05 && Math.abs(CAMPUS.origin.lon - 120.38) < 0.05);
+    check("campus(suzhou): signature landmarks present", ["南雍楼","科创大厦","庄里山","北大楼（风貌群）"].every(n =>
+      CAMPUS.landmarks.some(l => l.n === n)));
+  }
 
   console.log(" [checks]");
   let failed = 0;

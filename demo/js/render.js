@@ -24,12 +24,80 @@ function draw(){
   const L=cam.x-halfW, R=cam.x+halfW, Bo=cam.y-halfH, T=cam.y+halfH;
 
   drawGroundGrid(L,R,Bo,T,z);
-  for(const rd of CAMPUS.roads){ if(rd.isTrack) continue; drawRibbon(rd.pts, rd.w, "#3b3f45", rd.closed); }
+  drawWater();
+  drawForest();
+  for(const rd of CAMPUS.roads){
+    if(rd.isTrack) continue;
+    if(rd.style==="tram"){ drawRibbon(rd.pts, rd.w, "rgba(139,95,191,.55)", false, [10,8]); continue; }
+    drawRibbon(rd.pts, rd.w, "#3b3f45", rd.closed);
+  }
+  drawTrails();
   drawRibbon(CAMPUS.mainRoute.pts, 1.8, "rgba(249,198,58,.30)", true, [5,6]);
   for(const rd of CAMPUS.roads){ if(rd.isTrack) drawRibbon(rd.pts, rd.w, "#8a4a32", rd.closed); }
   for(const b of CAMPUS.buildings) drawBuilding(b);
+  drawLandmarks();
   drawCheckpoints();
   drawPlayer();
+}
+
+function drawWater(){
+  for(const w of (CAMPUS.water||[])){
+    if(w.c){
+      const [x,y]=w2s(w.c.x,w.c.y);
+      const rx=w.rx*cam.zoom, ry=w.ry*cam.zoom;
+      if(x+rx<-20||x-rx>W+20||y+ry<-20||y-ry>H+20) continue;
+      ctx.fillStyle="#16324a";
+      ctx.beginPath(); ctx.ellipse(x,y,rx,ry,0,0,7); ctx.fill();
+      ctx.strokeStyle="rgba(90,160,210,.35)"; ctx.lineWidth=1.5; ctx.stroke();
+    } else {
+      drawRibbon(w.pts, w.w, "#16324a", false);
+      drawRibbon(w.pts, Math.max(1,w.w*0.25), "rgba(90,160,210,.30)", false);
+    }
+  }
+}
+
+function drawForest(){
+  if(!CAMPUS.trees || cam.zoom<0.10) return;
+  for(const t of CAMPUS.trees){
+    const [x,y]=w2s(t.x,t.y);
+    if(x<-16||x>W+16||y<-16||y>H+16) continue;
+    const r=Math.max(1,t.r*cam.zoom);
+    ctx.fillStyle = t.tone>0.5 ? "#1c3226" : "#213b2c";
+    ctx.beginPath(); ctx.arc(x,y,r,0,7); ctx.fill();
+  }
+}
+
+function drawTrails(){
+  for(const tr of (CAMPUS.trails||[])) drawRibbon(tr.pts, 2.2, "rgba(140,170,130,.38)", !!tr.closed, [4,5]);
+}
+
+function drawLandmarks(){
+  if(cam.zoom<0.22) return;
+  ctx.save();
+  ctx.textAlign="center"; ctx.textBaseline="middle";
+  for(const lm of (CAMPUS.landmarks||[])){
+    const [x,y]=w2s(lm.c.x,lm.c.y);
+    if(x<-90||x>W+90||y<-40||y>H+40) continue;
+    ctx.fillStyle="#8b5fbf";
+    ctx.beginPath();
+    ctx.moveTo(x,y-6); ctx.lineTo(x+5,y); ctx.lineTo(x,y+6); ctx.lineTo(x-5,y);
+    ctx.closePath(); ctx.fill();
+    ctx.strokeStyle="rgba(244,238,255,.85)"; ctx.lineWidth=1; ctx.stroke();
+    ctx.fillStyle="rgba(240,235,250,.92)";
+    ctx.font='11px "Microsoft YaHei",sans-serif';
+    ctx.fillText(lm.n, x, y-13);
+  }
+  for(const g of (CAMPUS.gates||[])){
+    const [x,y]=w2s(g.c.x,g.c.y);
+    if(x<-60||x>W+60||y<-40||y>H+40) continue;
+    ctx.fillStyle="#f9c63a";
+    ctx.fillRect(x-4,y-4,8,8);
+    ctx.strokeStyle="rgba(0,0,0,.5)"; ctx.lineWidth=1; ctx.strokeRect(x-4,y-4,8,8);
+    ctx.fillStyle="rgba(249,198,58,.9)";
+    ctx.font='10px "Microsoft YaHei",sans-serif';
+    ctx.fillText(g.n, x, y-11);
+  }
+  ctx.restore();
 }
 
 function drawGroundGrid(L,R,Bo,T,z){
