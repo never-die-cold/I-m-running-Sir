@@ -39,7 +39,7 @@ namespace CampusRun.Unity
         {
             Instance = this;
 
-            Campus = CampusLayout.CreateDemo();
+            Campus = CampusLayout.CreateSuzhou();
             Mapper = new WorldGeoMapper(Campus.Origin, 1.0);
 
             Session = new RunSession(Mapper, Campus, 20260924UL);

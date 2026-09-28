@@ -61,6 +61,101 @@ namespace CampusRun.Core
         public Polyline OuterLoop;
         public Polyline TrackLoop;
 
+        /* 南京大学·苏州校区 —— 镜像 demo/js/campus-suzhou.js（依据《学在苏州》2025 版地图）。
+           仅含 Core 仿真所需的道路/建筑/主环线；水系/林木/地标为 JS 渲染层概念，不在本结构内。 */
+        public static CampusLayout CreateSuzhou()
+        {
+            CampusLayout campus = new CampusLayout();
+            campus.Name = "南京大学·苏州校区（太湖科学城）";
+            campus.Origin = new LatLon(31.3576000, 120.3770000);
+
+            campus.Roads.Add(new RoadDef("太湖大道",
+                new Vec2[] { new Vec2(-700.0, -500.0), new Vec2(700.0, -500.0) }, 16.0, false));
+            campus.Roads.Add(new RoadDef("有轨电车2号线",
+                new Vec2[] { new Vec2(-700.0, -516.0), new Vec2(700.0, -516.0) }, 3.0, false));
+            campus.Roads.Add(new RoadDef("普陀山路",
+                new Vec2[] { new Vec2(-680.0, -500.0), new Vec2(-680.0, 450.0) }, 6.0, false));
+            campus.Roads.Add(new RoadDef("昆仑山路",
+                new Vec2[] { new Vec2(-680.0, 450.0), new Vec2(640.0, 450.0) }, 6.0, false));
+            campus.Roads.Add(new RoadDef("九曲河路",
+                new Vec2[] { new Vec2(630.0, -500.0), new Vec2(630.0, 450.0) }, 6.0, false));
+            campus.Roads.Add(new RoadDef("虎丘大道",
+                new Vec2[] { new Vec2(320.0, -500.0), new Vec2(320.0, 450.0) }, 10.0, false));
+            campus.Roads.Add(new RoadDef("中央大道",
+                new Vec2[] { new Vec2(-300.0, -500.0), new Vec2(-300.0, 450.0) }, 8.0, false));
+            campus.Roads.Add(new RoadDef("西大道",
+                new Vec2[] { new Vec2(-540.0, -450.0), new Vec2(-540.0, 450.0) }, 6.0, false));
+            campus.Roads.Add(new RoadDef("东大道",
+                new Vec2[] { new Vec2(-140.0, -450.0), new Vec2(-140.0, 450.0) }, 6.0, false));
+            campus.Roads.Add(new RoadDef("诒微路",
+                new Vec2[] { new Vec2(-650.0, -260.0), new Vec2(630.0, -260.0) }, 6.0, false));
+            campus.Roads.Add(new RoadDef("君毅路",
+                new Vec2[] { new Vec2(-650.0, -80.0), new Vec2(630.0, -80.0) }, 7.0, false));
+            campus.Roads.Add(new RoadDef("季刚路",
+                new Vec2[] { new Vec2(-650.0, 160.0), new Vec2(630.0, 160.0) }, 7.0, false));
+            campus.Roads.Add(new RoadDef("焕庸路",
+                new Vec2[] { new Vec2(-650.0, 330.0), new Vec2(630.0, 330.0) }, 6.0, false));
+
+            campus.TrackLoop = BuildStadiumTrack(new Vec2(480.0, 40.0), 85.0, 52.0);
+            campus.Roads.Add(new RoadDef("运动场跑道", campus.TrackLoop.Points, 9.0, true));
+
+            /* ---- 西区 · 南（科研 + 生活服务） ---- */
+            campus.Buildings.Add(new BuildingDef("动物房", new Vec2(-600.0, -370.0), new Vec2(50.0, 40.0), "lab", 0.0));
+            campus.Buildings.Add(new BuildingDef("科研综合体四", new Vec2(-430.0, -370.0), new Vec2(100.0, 60.0), "lab", 0.0));
+            campus.Buildings.Add(new BuildingDef("科研综合体三", new Vec2(-200.0, -370.0), new Vec2(100.0, 60.0), "lab", 0.0));
+            campus.Buildings.Add(new BuildingDef("十九食堂", new Vec2(-90.0, -370.0), new Vec2(55.0, 40.0), "canteen", 0.0));
+            campus.Buildings.Add(new BuildingDef("校医院", new Vec2(-600.0, -170.0), new Vec2(60.0, 40.0), "clinic", 0.0));
+            campus.Buildings.Add(new BuildingDef("商业水街", new Vec2(-200.0, -170.0), new Vec2(90.0, 40.0), "shop", 0.0));
+            /* ---- 西区 · 中（图书 / 教学 / 行政） ---- */
+            campus.Buildings.Add(new BuildingDef("公共科研平台西A", new Vec2(-600.0, 5.0), new Vec2(70.0, 50.0), "lab", 0.0));
+            campus.Buildings.Add(new BuildingDef("公共科研平台西B", new Vec2(-600.0, 95.0), new Vec2(70.0, 50.0), "lab", 0.0));
+            campus.Buildings.Add(new BuildingDef("图书馆（西区）", new Vec2(-430.0, 40.0), new Vec2(95.0, 65.0), "library", 0.0));
+            campus.Buildings.Add(new BuildingDef("教学楼（AB区）", new Vec2(-215.0, 40.0), new Vec2(130.0, 75.0), "teach", 0.0));
+            campus.Buildings.Add(new BuildingDef("行政楼", new Vec2(-90.0, 60.0), new Vec2(75.0, 45.0), "admin", 0.0));
+            campus.Buildings.Add(new BuildingDef("大礼堂", new Vec2(-90.0, -20.0), new Vec2(70.0, 45.0), "admin", 0.0));
+            campus.Buildings.Add(new BuildingDef("北大楼", new Vec2(-430.0, 110.0), new Vec2(55.0, 40.0), "heritage", 0.0));
+            /* ---- 西区 · 北（科研 + 书院 + 体育） ---- */
+            campus.Buildings.Add(new BuildingDef("科研综合体一", new Vec2(-600.0, 245.0), new Vec2(95.0, 60.0), "lab", 0.0));
+            campus.Buildings.Add(new BuildingDef("科研综合体二", new Vec2(-430.0, 245.0), new Vec2(95.0, 60.0), "lab", 0.0));
+            campus.Buildings.Add(new BuildingDef("本科生书院1", new Vec2(-215.0, 245.0), new Vec2(65.0, 70.0), "dorm", 0.0));
+            campus.Buildings.Add(new BuildingDef("本科生书院2", new Vec2(-90.0, 245.0), new Vec2(65.0, 70.0), "dorm", 0.0));
+            campus.Buildings.Add(new BuildingDef("硕士生书院", new Vec2(-600.0, 390.0), new Vec2(60.0, 50.0), "dorm", 0.0));
+            campus.Buildings.Add(new BuildingDef("大学生活动中心", new Vec2(-430.0, 390.0), new Vec2(120.0, 55.0), "center", 0.0));
+            campus.Buildings.Add(new BuildingDef("体育馆", new Vec2(-215.0, 390.0), new Vec2(110.0, 60.0), "gym", 0.0));
+            campus.Buildings.Add(new BuildingDef("游泳馆", new Vec2(-90.0, 390.0), new Vec2(70.0, 45.0), "gym", 0.0));
+            /* ---- 东区 · 南（科创 + 国际交流 + 宿舍） ---- */
+            campus.Buildings.Add(new BuildingDef("国际学术交流中心", new Vec2(480.0, -360.0), new Vec2(170.0, 90.0), "hotel", 0.0));
+            campus.Buildings.Add(new BuildingDef("科创大厦", new Vec2(470.0, -170.0), new Vec2(100.0, 75.0), "tech", 0.0));
+            campus.Buildings.Add(new BuildingDef("科创大厦食堂", new Vec2(570.0, -170.0), new Vec2(50.0, 40.0), "canteen", 0.0));
+            campus.Buildings.Add(new BuildingDef("知园", new Vec2(150.0, -170.0), new Vec2(65.0, 100.0), "dorm", 0.0));
+            campus.Buildings.Add(new BuildingDef("十六食堂", new Vec2(230.0, -170.0), new Vec2(50.0, 35.0), "canteen", 0.0));
+            campus.Buildings.Add(new BuildingDef("快递网点", new Vec2(280.0, -170.0), new Vec2(30.0, 25.0), "shop", 0.0));
+            campus.Buildings.Add(new BuildingDef("宿舍商业区", new Vec2(80.0, -115.0), new Vec2(60.0, 30.0), "shop", 0.0));
+            /* ---- 东区 · 中（教学群 + 运动场） ---- */
+            campus.Buildings.Add(new BuildingDef("十七食堂", new Vec2(405.0, -40.0), new Vec2(50.0, 35.0), "canteen", 0.0));
+            campus.Buildings.Add(new BuildingDef("校园派出所", new Vec2(350.0, -40.0), new Vec2(40.0, 30.0), "admin", 0.0));
+            campus.Buildings.Add(new BuildingDef("图书馆（东区）", new Vec2(400.0, 125.0), new Vec2(70.0, 55.0), "library", 0.0));
+            campus.Buildings.Add(new BuildingDef("南雍楼", new Vec2(460.0, 240.0), new Vec2(150.0, 80.0), "teach", 0.0));
+            campus.Buildings.Add(new BuildingDef("天枢楼", new Vec2(355.0, 240.0), new Vec2(50.0, 55.0), "admin", 0.0));
+            campus.Buildings.Add(new BuildingDef("文正楼", new Vec2(585.0, 240.0), new Vec2(80.0, 55.0), "teach", 0.0));
+            campus.Buildings.Add(new BuildingDef("元和楼", new Vec2(595.0, 115.0), new Vec2(60.0, 45.0), "teach", 0.0));
+            /* ---- 东区 · 北（宿舍） ---- */
+            campus.Buildings.Add(new BuildingDef("仁园", new Vec2(400.0, 390.0), new Vec2(65.0, 90.0), "dorm", 0.0));
+            campus.Buildings.Add(new BuildingDef("勇园", new Vec2(520.0, 390.0), new Vec2(65.0, 90.0), "dorm", 0.0));
+            campus.Buildings.Add(new BuildingDef("校园门诊部", new Vec2(600.0, 390.0), new Vec2(50.0, 35.0), "clinic", 0.0));
+
+            /* 主环线 ≈3.47km：南门 → 中央大道 → 焕庸路 → 九曲河路 → 君毅路 → 虎丘大道 → 诒微路 */
+            Vec2[] mainLoop = new Vec2[]
+            {
+                new Vec2(-300.0, -470.0), new Vec2(-300.0, 330.0), new Vec2(630.0, 330.0),
+                new Vec2(630.0, -80.0), new Vec2(320.0, -80.0), new Vec2(320.0, -260.0),
+                new Vec2(-300.0, -260.0)
+            };
+            campus.OuterLoop = new Polyline(mainLoop, true);
+            campus.MainRoute = campus.OuterLoop;
+            return campus;
+        }
+
         public static CampusLayout CreateDemo()
         {
             CampusLayout campus = new CampusLayout();

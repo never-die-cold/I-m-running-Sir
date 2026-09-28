@@ -91,14 +91,17 @@ if (-not $SkipAndroid) {
     $apk = Join-Path $root "android-plugin\LpRunHook\build\outputs\apk\release\LpRunHook-release.apk"
 
     Report "MockLocationDriver-release.aar" (Test-Path $aar)
-    Report "LpRunHook-release.apk" (Test-Path $apk)
 
+    # LpRunHook 为本地私有模块（.gitignore 排除，不随开源仓库分发）——本地构建过才检查，缺失记 SKIP 不计失败
     if (Test-Path $apk) {
+        Report "LpRunHook-release.apk" $true
         Add-Type -AssemblyName System.IO.Compression.FileSystem
         $zip = [System.IO.Compression.ZipFile]::OpenRead($apk)
         $hasInit = $null -ne ($zip.Entries | Where-Object { $_.FullName -eq "assets/xposed_init" })
         $zip.Dispose()
         Report "LSPosed entry point packaged (assets/xposed_init)" $hasInit
+    } else {
+        Write-Host "  [SKIP] LpRunHook-release.apk（本地私有模块未构建，跳过）" -ForegroundColor Yellow
     }
 
     $java = Get-ChildItem (Join-Path $root "android-plugin") -Recurse -Filter *.java -ErrorAction SilentlyContinue |

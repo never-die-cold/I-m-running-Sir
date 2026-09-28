@@ -42,7 +42,7 @@ namespace CampusRun.SimHarness
 
             double targetSpeedMps = 1000.0 / targetPaceSecPerKm;
 
-            CampusLayout campus = CampusLayout.CreateDemo();
+            CampusLayout campus = CampusLayout.CreateSuzhou();
             WorldGeoMapper mapper = new WorldGeoMapper(campus.Origin, 1.0);
             RunSession session = new RunSession(mapper, campus, seed);
             session.TargetSpeedMps = targetSpeedMps;
