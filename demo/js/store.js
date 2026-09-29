@@ -43,6 +43,27 @@ const ACH_DEFS = [
   { id:"rain_runner",   n:"雨中曲",     d:"雨中累计奔跑 60 秒" }
 ];
 
+/* 局外天赋（金币购买，战斗模式开局生效） */
+const META_DEFS = [
+  { id:"atk",    n:"利刃",   d:"攻击力 +8%/级",   max:5, cost:lv=>60*(lv+1) },
+  { id:"hp",     n:"强健",   d:"生命上限 +12/级", max:5, cost:lv=>60*(lv+1) },
+  { id:"spd",    n:"疾风步", d:"移速 +5%/级",     max:5, cost:lv=>80*(lv+1) },
+  { id:"aspd",   n:"连弩",   d:"攻速 +7%/级",     max:5, cost:lv=>80*(lv+1) },
+  { id:"revive", n:"不屈",   d:"每局额外复活 1 次", max:1, cost:()=>300 }
+];
+function metaBuy(id) {
+  const def = META_DEFS.find(m => m.id === id);
+  if (!def) return false;
+  const lv = Progress.data.meta[id] || 0;
+  if (lv >= def.max) return false;
+  const cost = def.cost(lv);
+  if (Progress.data.coins < cost) return false;
+  Progress.data.coins -= cost;
+  Progress.data.meta[id] = lv + 1;
+  Progress.save();
+  return true;
+}
+
 const Progress = {
   data: null,
   onToast: null,          // ui.js 注入 (text, kind)
@@ -52,6 +73,8 @@ const Progress = {
     this.data = Store.read("progress", { ach: [], totalDistM: 0, totalKills: 0, best: {} });
     if (!this.data.ach) this.data.ach = [];
     if (!this.data.best) this.data.best = {};
+    if (this.data.coins === undefined) this.data.coins = 0;
+    if (!this.data.meta) this.data.meta = { atk: 0, hp: 0, spd: 0, aspd: 0, revive: 0 };
     return this.data;
   },
   save() { Store.write("progress", this.data); },
@@ -141,6 +164,7 @@ const Progress = {
         if (this.onToast) this.onToast("📜 新纪录 · " + session.campus.name, "rec");
       }
     }
+    if (battle && battle.coins > 0) this.data.coins += battle.coins;   // 战斗金币入账
     this._lastDur = -1; this._lastDist = -1; this._lastKills = -1; this._sprint = 0;
     this.save();
   }

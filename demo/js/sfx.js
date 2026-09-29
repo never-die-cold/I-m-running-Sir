@@ -45,6 +45,8 @@ const Sfx = (() => {
         case "record":     beep(784, .10, "sine"); beep(988, .15, "sine", .10); break;
         case "levelup":    [440, 554, 659, 880].forEach((f, i) => beep(f, .12, "square", i * .08, .28)); break;
         case "shoot":      beep(200, .05, "square", 0, .12); break;
+        case "coin":       beep(988, .05, "triangle", 0, .22); beep(1319, .07, "triangle", .05, .18); break;
+        case "buy":        beep(523, .07, "triangle", 0, .3); beep(784, .1, "triangle", .07, .3); break;
         case "hurt":       beep(110, .09, "sawtooth", 0, .28); break;
         case "death":      [300, 220, 150].forEach((f, i) => beep(f, .20, "sawtooth", i * .13, .32)); break;
         case "click":      beep(880, .04, "sine", 0, .18); break;

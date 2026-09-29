@@ -31,6 +31,16 @@ function _nextToast(){
 }
 Progress.onToast=(text,kind)=>{ showToast(text,kind); Sfx.play(kind==="rec"?"record":"ach"); };
 
+/* 开发者面板（GPS/JSON）显隐：跑步模式默认开、战斗模式默认收，H 随时切换 */
+function toggleDevPanels(){
+  const cur=Store.read("devPanels", true);
+  Store.write("devPanels", !cur);
+  showToast(!cur?"🛠 开发面板已显示":"面板已收起 (H)");
+}
+function devPanelsVisible(){
+  return Store.read("devPanels", true);
+}
+
 /* 打卡/巡礼发现的音效与彩带（按帧差分触发）+ 定向全清自动结算 */
 let _lastCleared=0, _lastLm=0, _resultShownRun=false;
 function observePickups(session){
@@ -142,6 +152,25 @@ function buildStartPanel(){
     d.addEventListener("click",()=>{ START_OPTS.pace=p.v; Sfx.play("click"); buildStartPanel(); });
     pe.appendChild(d);
   });
+  /* 局外天赋商店 */
+  $("coinCount").textContent=Progress.data.coins;
+  const metaEl=$("metaChips"); metaEl.innerHTML="";
+  META_DEFS.forEach(m=>{
+    const lv=Progress.data.meta[m.id]||0;
+    const maxed=lv>=m.max, cost=maxed?0:m.cost(lv);
+    const afford=Progress.data.coins>=cost;
+    const d=document.createElement("div");
+    d.className="chip"+(maxed?" on":(afford?"":" dim"));
+    d.style.opacity=(maxed||afford)?"1":"0.5";
+    d.textContent=m.n+" Lv"+lv+(maxed?"（满）":" → "+cost+"💰");
+    d.title=m.d;
+    d.addEventListener("click",()=>{
+      if(maxed) return;
+      if(metaBuy(m.id)){ Sfx.play("buy"); buildStartPanel(); }
+      else Sfx.play("click");
+    });
+    metaEl.appendChild(d);
+  });
   const P=Progress.data;
   const bestLines=Object.entries(P.best||{}).map(([k,b])=>{
     const seg=k.split(":"), cid=seg[0], mode=seg[1];
@@ -151,7 +180,8 @@ function buildStartPanel(){
   });
   $("startRecords").innerHTML=
     "成就 <b>"+P.ach.length+" / "+ACH_DEFS.length+"</b> · 累计里程 <b>"+
-    ((P.totalDistM||0)/1000).toFixed(2)+" km</b> · 累计击杀 <b>"+(P.totalKills||0)+"</b>"+
+    ((P.totalDistM||0)/1000).toFixed(2)+" km</b> · 累计击杀 <b>"+(P.totalKills||0)+
+    "</b> · 金币 <b>💰"+(P.coins||0)+"</b>"+
     (bestLines.length?"<br>"+bestLines.join("<br>"):"<br>暂无记录，开跑吧！");
 }
 function showStart(){ buildStartPanel(); $("startOverlay").style.display="flex"; boot.paused=true; }
@@ -181,7 +211,8 @@ function showResult(title){
   if(session.mode==="battle"){
     $("deadStats").innerHTML=
       "推进站点 <b>"+BATTLE.wave+" / "+BATTLE.roomsTotal+"</b> · 击杀 <b>"+BATTLE.kills+"</b> · 等级 <b>Lv."+BATTLE.level+"</b><br>"+
-      "本次里程 <b>"+(session.recordedDist/1000).toFixed(2)+" km</b> · 用时 <b>"+fmtDur(session.duration)+"</b>";
+      "本次里程 <b>"+(session.recordedDist/1000).toFixed(2)+" km</b> · 用时 <b>"+fmtDur(session.duration)+
+      "</b> · 金币 <b>💰+"+(BATTLE.coins||0)+"</b>";
   } else {
     const pace=session.duration>1?1000*session.duration/Math.max(1,session.recordedDist):0;
     $("deadStats").innerHTML=
@@ -248,6 +279,9 @@ function updateHud(){
   /* ---- 战斗层 HUD（弓箭手大作战式） ---- */
   const bt=BATTLE;
   const inBattle=s.mode==="battle";
+  /* GPS/JSON 开发面板：战斗模式默认收起，H 切换 */
+  $("pRight").style.display=devPanelsVisible()?"":"none";
+  $("pRight").style.opacity=inBattle?"0.85":"1";
   $("battleRows").style.display=inBattle?"":"none";
   $("vCp").parentElement.style.display=inBattle?"none":"";
   $("vCpBar").style.display=inBattle?"none":"";

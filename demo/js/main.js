@@ -16,6 +16,7 @@ window.addEventListener("keydown",e=>{
     return;
   }
   if(e.code==="KeyM"){ showToast(Sfx.toggle()?"🔇 音效已静音":"🔊 音效已开启"); return; }
+  if(e.code==="KeyH"){ toggleDevPanels(); return; }
   if(e.code==="KeyP"||e.code==="Escape"){ togglePause(); return; }
   /* 战斗升级三选一：1/2/3 选牌（优先于模式切换） */
   if(BATTLE.state==="levelup"){
@@ -94,6 +95,8 @@ function resetRun(){
   session.landmarksFound=[];
   session.stamina=100;
   if(session.mode==="battle") battleReset(20260924, session);
+  if(session.mode==="battle") cam.zoom=Math.min(cam.zoom,0.34);   /* 战斗视野拉远 */
+  if(typeof Store!=="undefined") Store.write("devPanels", session.mode!=="battle"); /* 战斗默认收 GPS 面板 */
   session.startRun();
   boot.autopilot=false;
   cam.x=session.worldPos.x; cam.y=session.worldPos.y;
@@ -153,6 +156,7 @@ function loop(nowMs){
     const dt = battleMode ? realDt : realDt * boot.speedMul;
     ENV.tick(realDt, battleMode?1:boot.speedMul);
     updateEnvFx(realDt);
+    if(BATTLE.shake>0) BATTLE.shake=Math.max(0,BATTLE.shake-realDt*2.6);
 
     let moving=false;
     if(battleMode && BATTLE.state==="fighting"){

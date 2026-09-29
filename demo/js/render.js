@@ -19,6 +19,11 @@ function w2s(x,y){ return [ (x-cam.x)*cam.zoom + W/2, H/2 - (y-cam.y)*cam.zoom ]
 function draw(){
   ctx.fillStyle="#07090a"; ctx.fillRect(0,0,W,H);
 
+  /* 战斗震屏：世界层整体偏移 */
+  const sh=BATTLE.shake||0;
+  ctx.save();
+  if(sh>0.01) ctx.translate((Math.random()-.5)*sh*16,(Math.random()-.5)*sh*16);
+
   const z=cam.zoom;
   const halfW=W/2/z, halfH=H/2/z;
   const L=cam.x-halfW, R=cam.x+halfW, Bo=cam.y-halfH, T=cam.y+halfH;
@@ -48,6 +53,7 @@ function draw(){
   drawPfx();
   if(session.mode==="battle") drawBattle();
   drawPlayer();
+  ctx.restore();
 
   /* 天色 / 天气罩 + 雨 */
   const tint=ENV.skyTint();
@@ -351,11 +357,41 @@ function drawBattle(){
     ctx.fillRect(x-bw/2,y-r-8,bw,3);
     ctx.fillStyle=e.type==="boss"?"#ffd23f":"#71e88a";
     ctx.fillRect(x-bw/2,y-r-8,bw*Math.max(0,e.hp/e.maxHp),3);
+    /* 冲锋兵蓄力预警：红色锁定线 */
+    if((e.tele||0)>0){
+      const [px,py]=w2s(BATTLE._px,BATTLE._py);
+      ctx.strokeStyle="rgba(255,80,60,"+(0.35+0.5*Math.sin(BATTLE.time*24)).toFixed(2)+")";
+      ctx.lineWidth=2;
+      ctx.setLineDash([6,5]);
+      ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(px,py); ctx.stroke();
+      ctx.setLineDash([]);
+    }
     if(e.type==="boss"){
       ctx.strokeStyle="rgba(255,210,63,.9)"; ctx.lineWidth=2;
       ctx.beginPath(); ctx.arc(x,y,r+3+Math.sin(BATTLE.time*6)*1.5,0,7); ctx.stroke();
     }
     ctx.restore();
+  }
+  /* 屏外敌人：屏幕边缘红色箭头（敌情感） */
+  for(const e of BATTLE.enemies){
+    const [x,y]=w2s(e.x,e.y);
+    if(x>-20&&x<W+20&&y>-20&&y<H+20) continue;
+    const cx2=W/2, cy2=H/2;
+    const a=Math.atan2(y-cy2,x-cx2);
+    const px2=Math.max(26,Math.min(W-26,cx2+Math.cos(a)*Math.min(W,H)*0.45));
+    const py2=Math.max(26,Math.min(H-26,cy2+Math.sin(a)*Math.min(W,H)*0.45));
+    ctx.save();
+    ctx.translate(px2,py2); ctx.rotate(a);
+    ctx.fillStyle="rgba(255,90,70,.85)";
+    ctx.beginPath(); ctx.moveTo(9,0); ctx.lineTo(-5,5); ctx.lineTo(-5,-5); ctx.closePath(); ctx.fill();
+    ctx.restore();
+  }
+  /* 金币掉落 */
+  for(const d of BATTLE.drops){
+    const [x,y]=w2s(d.x,d.y);
+    ctx.fillStyle="#ffd23f";
+    ctx.beginPath(); ctx.arc(x,y,Math.max(2.2,3.2*cam.zoom),0,7); ctx.fill();
+    ctx.strokeStyle="rgba(120,90,0,.7)"; ctx.lineWidth=1; ctx.stroke();
   }
   /* 敌方弹 */
   for(const b of BATTLE.ebullets){
@@ -372,6 +408,19 @@ function drawBattle(){
     ctx.moveTo(x2,y2); ctx.lineTo(x,y);
   }
   ctx.stroke();
+  /* 伤害数字（暴击更大更黄） */
+  ctx.textAlign="center"; ctx.textBaseline="middle";
+  for(const t of BATTLE.dmgTexts){
+    const [x,y]=w2s(t.x,t.y);
+    const pgs=t.age/t.dur;
+    ctx.globalAlpha=1-pgs*pgs;
+    ctx.font=(t.crit?"bold 17px":"bold 13px")+" 'Segoe UI',sans-serif";
+    ctx.strokeStyle="rgba(0,0,0,.75)"; ctx.lineWidth=3;
+    ctx.strokeText(String(t.text),x,y);
+    ctx.fillStyle=t.crit?"#ffd23f":"#ffffff";
+    ctx.fillText(String(t.text),x,y);
+  }
+  ctx.globalAlpha=1;
 }
 
 function drawPlayer(){

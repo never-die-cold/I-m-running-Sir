@@ -245,14 +245,17 @@ const test = `
   BATTLE.bullets.length = 0; BATTLE.fireCd = 0;
   for (let i = 0; i < 12; i++) battleTick(0.1, session.worldPos, false);
   check("arrow damages enemy", e0.hp < hp0 || e0.hp <= 0);
+  check("hit spawns damage number", BATTLE.dmgTexts.length > 0);
   BATTLE.enemies.forEach(e => { e.hp = 1; e.x = session.worldPos.x + 8; e.y = session.worldPos.y; });
   BATTLE.bullets.length = 0; BATTLE.fireCd = 0;
   const kills0 = BATTLE.kills;
   for (let i = 0; i < 30; i++) battleTick(0.1, session.worldPos, false);
   check("clearing room checks the checkpoint", BATTLE.enemies.length === 0 &&
     cp0.cleared === true && BATTLE.room === null && BATTLE.kills > kills0);
+  check("kills drop magnet coins", BATTLE.coins > 0);
   while (BATTLE.state === "levelup") applySkill(0);
   check("levelup grants 3 choices, skill applies", (() => {
+    BATTLE.hitStop = 0;                     // 顿帧不跨状态残留
     BATTLE.exp = BATTLE.expNext;
     battleTick(0.05, session.worldPos, false);
     if (BATTLE.state !== "levelup" || BATTLE.choices.length !== 3) return false;
@@ -266,9 +269,9 @@ const test = `
   battleTick(0.05, session.worldPos, false);
   check("second station mixes in shooters", BATTLE.room === cp1 && BATTLE.wave === 2 &&
     BATTLE.enemies.some(e => e.type === "shooter"));
-  BATTLE.enemies.forEach(e => { e.hp = 1; e.x = session.worldPos.x + 8; e.y = session.worldPos.y; });
+  BATTLE.enemies.forEach(e => { e.hp = 1; e.x = session.worldPos.x + 6; e.y = session.worldPos.y; });
   BATTLE.bullets.length = 0; BATTLE.fireCd = 0;
-  for (let i = 0; i < 30; i++) battleTick(0.1, session.worldPos, false);
+  for (let i = 0; i < 50; i++) battleTick(0.1, session.worldPos, false);
   check("second station cleared", cp1.cleared === true && BATTLE.enemies.length === 0);
   while (BATTLE.state === "levelup") applySkill(0);
   const cp2 = session.checkpoints[2];
@@ -276,6 +279,44 @@ const test = `
   battleTick(0.05, session.worldPos, false);
   check("final station is a boss room", BATTLE.wave === 3 &&
     BATTLE.enemies.some(e => e.type === "boss") && BATTLE.enemies.length === 4);
+
+  /* 局外天赋 / 不屈复活 / 金币入账 */
+  check("meta talents apply at battle start", (() => {
+    Progress.data.meta.atk = 1; Progress.data.meta.hp = 1;
+    resetRun();
+    const ok = Math.abs(BATTLE.player.atk - 10.8) < 1e-9 && BATTLE.player.maxHp === 112;
+    Progress.data.meta.atk = 0; Progress.data.meta.hp = 0;
+    resetRun();
+    return ok && Math.abs(BATTLE.player.atk - 10) < 1e-9 && BATTLE.player.maxHp === 100;
+  })());
+  check("revive talent saves once", (() => {
+    Progress.data.meta.revive = 1;
+    resetRun();
+    const cpR = session.checkpoints[0];
+    session.worldPos = { x: cpR.localMeters.x, y: cpR.localMeters.y };
+    battleTick(0.05, session.worldPos, false);
+    BATTLE.enemies = [{ id: 9002, type: "chaser", x: BATTLE._px, y: BATTLE._py, hp: 999, maxHp: 999,
+      fireT: 0, dashT: 0, dashVx: 0, dashVy: 0, dashLeft: 0, hitCd: 0, flash: 0, tele: 0, sign: 1 }];
+    BATTLE.player.hp = 5;
+    battleTick(0.1, session.worldPos, false);
+    const ok = BATTLE.state === "fighting" && BATTLE.player.hp > 0 && BATTLE.revives === 0;
+    Progress.data.meta.revive = 0;
+    return ok;
+  })());
+  check("battle coins persist at finishRun", (() => {
+    const c0 = Progress.data.coins;
+    BATTLE.coins = 25;
+    Progress.finishRun(session, BATTLE);
+    return Progress.data.coins >= c0 + 25;
+  })());
+  check("metaBuy spends coins", (() => {
+    Progress.data.coins = 500;
+    const lv0 = Progress.data.meta.atk;
+    const ok = metaBuy("atk") && Progress.data.meta.atk === lv0 + 1 && Progress.data.coins < 500;
+    Progress.data.meta.atk = 0; Progress.save();
+    return ok;
+  })());
+
   BATTLE.enemies = []; BATTLE.ebullets = []; BATTLE.bullets = [];
   BATTLE.enemies.push({ id: 9001, type: "chaser", x: BATTLE._px, y: BATTLE._py, hp: 999, maxHp: 999,
     fireT: 0, dashT: 0, dashVx: 0, dashVy: 0, dashLeft: 0, hitCd: 0, flash: 0, sign: 1 });

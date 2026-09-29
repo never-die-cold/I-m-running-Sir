@@ -12,6 +12,10 @@ const BATTLE = {
   bullets: [],      // 玩家箭 {x,y,vx,vy,pierce,rico,hits,life}
   ebullets: [],     // 敌方弹 {x,y,vx,vy,dmg,life}
   fx: [],           // {x,y,age,dur,r,color}
+  dmgTexts: [],     // 伤害数字 {x,y,vy,age,dur,text,crit}
+  drops: [],        // 掉落金币 {x,y,vx,vy,age,val}
+  shake: 0,         // 屏幕震动强度（render 读取，主循环衰减）
+  hitStop: 0,       // 顿帧计时（>0 时冻结战斗世界）
   wave: 0,          // 当前站点编号（1 起），0=赶路中
   roomsTotal: 0,    // 站点总数
   room: null,       // 当前驻守的打卡点（清空前不再触发新房间）
@@ -48,13 +52,28 @@ function battleReset(seed, session){
   BATTLE.player = { hp:100, maxHp:100, atk:10, atkInterval:0.55, arrows:1, pierce:0,
                     ricochet:0, moveMul:1, range:150, nova:0, novaCd:0 };
   BATTLE.enemies=[]; BATTLE.bullets=[]; BATTLE.ebullets=[]; BATTLE.fx=[];
+  BATTLE.dmgTexts=[]; BATTLE.drops=[];
+  BATTLE.shake=0; BATTLE.hitStop=0; BATTLE.coins=0;
   BATTLE.wave=0; BATTLE.roomsTotal=0; BATTLE.room=null;
   BATTLE.kills=0; BATTLE.exp=0; BATTLE.level=1; BATTLE.expNext=10;
   BATTLE.state="fighting"; BATTLE.choices=[];
   BATTLE.session=session||null;
   if(session) BATTLE.roomsTotal=session.checkpoints.length;
+  if(typeof Progress!=="undefined") battleApplyMeta();
   BATTLE.rng=new Rng((seed===undefined?20260924:seed)>>>0);
   BATTLE._nextId=1; BATTLE.fireCd=0; BATTLE.novaCd=0; BATTLE.time=0;
+}
+
+/* 局外天赋（store.js META_DEFS）→ 战斗内初始属性 */
+function battleApplyMeta(){
+  if(typeof Progress==="undefined"||!Progress.data.meta) return;
+  const m=Progress.data.meta;
+  const p=BATTLE.player;
+  p.atk=10*(1+0.08*(m.atk||0));
+  p.maxHp=100+12*(m.hp||0); p.hp=p.maxHp;
+  p.moveMul=1+0.05*(m.spd||0);
+  p.atkInterval=0.55/(1+0.07*(m.aspd||0));
+  BATTLE.revives=m.revive||0;
 }
 
 /* 站点出怪：怪物以打卡点为中心驻守；末站为 BOSS 房 */
@@ -105,15 +124,33 @@ function battleFireAt(target){
 function battleHurtPlayer(dmg){
   const p=BATTLE.player;
   p.hp-=dmg;
+  BATTLE.shake=Math.min(1,(BATTLE.shake||0)+0.38);
   BATTLE.fx.push({x:BATTLE._px,y:BATTLE._py,age:0,dur:0.35,r:16,color:"#ff6b5a"});
-  if(p.hp<=0){ p.hp=0; BATTLE.state="dead"; }
+  if(p.hp<=0){
+    if(BATTLE.revives>0){                       // 局外天赋「不屈」
+      BATTLE.revives--;
+      p.hp=Math.round(p.maxHp*0.6);
+      BATTLE.fx.push({x:BATTLE._px,y:BATTLE._py,age:0,dur:0.9,r:60,color:"#f9c63a"});
+      if(typeof Progress!=="undefined"&&Progress.onToast) Progress.onToast("✨ 不屈发动！","ach");
+      return;
+    }
+    p.hp=0; BATTLE.state="dead";
+  }
 }
 
 function battleKill(e){
   const t=ENEMY_TYPES[e.type];
   BATTLE.kills++;
   BATTLE.exp+=t.exp;
+  BATTLE.shake=Math.min(1,(BATTLE.shake||0)+0.10);
+  BATTLE.hitStop=Math.min(0.09,(BATTLE.hitStop||0)+0.045);   // 击杀顿帧
   BATTLE.fx.push({x:e.x,y:e.y,age:0,dur:0.5,r:t.r*2.2,color:t.color});
+  /* 掉金币（磁吸拾取） */
+  const n=e.type==="boss"?10:1;
+  for(let i=0;i<n&&BATTLE.drops.length<80;i++){
+    const a=BATTLE.rng.next()*Math.PI*2;
+    BATTLE.drops.push({x:e.x,y:e.y,vx:Math.cos(a)*7,vy:Math.sin(a)*7,age:0,val:1});
+  }
 }
 
 function battleTryLevelUp(){
@@ -148,9 +185,28 @@ function applySkill(i){
   return true;
 }
 
+/* 特效/伤害数字老化 */
+function battleAgeFx(dt){
+  for(let i=BATTLE.fx.length-1;i>=0;i--){
+    BATTLE.fx[i].age+=dt;
+    if(BATTLE.fx[i].age>=BATTLE.fx[i].dur) BATTLE.fx.splice(i,1);
+  }
+  for(let i=BATTLE.dmgTexts.length-1;i>=0;i--){
+    const t=BATTLE.dmgTexts[i];
+    t.age+=dt; t.y+=t.vy*dt; t.vy*=Math.exp(-2.5*dt);
+    if(t.age>=t.dur) BATTLE.dmgTexts.splice(i,1);
+  }
+}
+
 /* 主步进：playerPos=玩家世界坐标，moving=是否在移动（移动时不出箭） */
 function battleTick(dt, playerPos, moving){
   if(BATTLE.state!=="fighting" || dt<=0) return;
+  /* 顿帧：命中/击杀瞬间冻结战斗世界，只老化特效 */
+  if((BATTLE.hitStop||0)>0){
+    BATTLE.hitStop-=dt;
+    battleAgeFx(dt);
+    return;
+  }
   const p=BATTLE.player;
   BATTLE.time+=dt;
   BATTLE._px=playerPos.x; BATTLE._py=playerPos.y;
@@ -201,7 +257,15 @@ function battleTick(dt, playerPos, moving){
         if(b.hits.includes(e.id)) continue;            // 同一枚箭不重复命中
         const t=ENEMY_TYPES[e.type];
         if(V.dist(b,{x:e.x,y:e.y}) < t.r+3.5){
-          e.hp-=p.atk; b.hits.push(e.id); e.flash=0.15;
+          const crit=BATTLE.rng.next()<0.12;
+          const dmg=Math.round(p.atk*(crit?2:1));
+          e.hp-=dmg; b.hits.push(e.id); e.flash=0.15;
+          /* 击退（沿箭向冲量）+ 伤害数字 + 轻顿帧 */
+          e.kbx=(e.kbx||0)+b.vx/BULLET_SPEED*4.2;
+          e.kby=(e.kby||0)+b.vy/BULLET_SPEED*4.2;
+          BATTLE.dmgTexts.push({x:e.x+(BATTLE.rng.next()-0.5)*4, y:e.y-t.r-2,
+                                vy:-26, age:0, dur:0.7, text:dmg, crit});
+          BATTLE.hitStop=Math.min(0.08,(BATTLE.hitStop||0)+0.016);
           BATTLE.fx.push({x:e.x,y:e.y,age:0,dur:0.25,r:t.r,color:"#fff"});
           if(e.hp<=0) battleKill(e);
           if(b.pierce>0){ b.pierce--; }
@@ -231,6 +295,7 @@ function battleTick(dt, playerPos, moving){
   if(BATTLE.room && BATTLE.enemies.length===0){
     BATTLE.room.cleared=true;
     BATTLE.exp+=8;
+    BATTLE.coins+=6;
     BATTLE.fx.push({x:BATTLE.room.localMeters.x,y:BATTLE.room.localMeters.y,age:0,dur:0.9,
                     r:BATTLE.room.radius,color:"#f9c63a"});
     BATTLE.room=null;
@@ -243,7 +308,11 @@ function battleTick(dt, playerPos, moving){
     e.flash=Math.max(0,e.flash-dt);
     const dx=BATTLE._px-e.x, dy=BATTLE._py-e.y, d=Math.hypot(dx,dy)||1;
     let vx=0, vy=0;
-    if(e.type==="chaser"){ vx=dx/d*t.speed; vy=dy/d*t.speed; }
+    if(e.type==="chaser"){
+      vx=dx/d*t.speed; vy=dy/d*t.speed;
+      const sway=Math.sin(BATTLE.time*2.4+e.id*1.7)*1.15;   /* 正弦侧摆，拒绝直线冲脸 */
+      vx+=-dy/d*sway; vy+=dx/d*sway;
+    }
     else if(e.type==="shooter"){
       if(d>85){ vx=dx/d*t.speed; vy=dy/d*t.speed; }
       else if(d<55){ vx=-dx/d*t.speed; vy=-dy/d*t.speed; }
@@ -257,10 +326,17 @@ function battleTick(dt, playerPos, moving){
     }
     else if(e.type==="charger"){
       if(e.dashLeft>0){ e.dashLeft-=dt; vx=e.dashVx; vy=e.dashVy; }
+      else if((e.tele||0)>0){
+        e.tele-=dt;                                          /* 蓄力：定身，方向已锁定 */
+        if(e.tele<=0){ e.dashLeft=1.0; }
+      }
       else {
         e.dashT-=dt;
-        if(e.dashT<=0 && d<75){ e.dashT=t.dashCd+BATTLE.rng.range(0,1);
-          e.dashLeft=1.0; e.dashVx=dx/d*t.dashSpeed; e.dashVy=dy/d*t.dashSpeed; }
+        if(e.dashT<=0 && d<85){
+          e.dashT=t.dashCd+BATTLE.rng.range(0,1);
+          e.tele=0.55;                                       /* 预警 0.55s，方向锁定可躲避 */
+          e.dashVx=dx/d*t.dashSpeed; e.dashVy=dy/d*t.dashSpeed;
+        }
         else { vx=dx/d*t.speed; vy=dy/d*t.speed; }
       }
     }
@@ -277,8 +353,27 @@ function battleTick(dt, playerPos, moving){
       }
     }
     e.x+=vx*dt; e.y+=vy*dt;
+    /* 受击击退冲量衰减 */
+    e.x+=(e.kbx||0)*dt; e.y+=(e.kby||0)*dt;
+    const kd=Math.exp(-9*dt);
+    e.kbx=(e.kbx||0)*kd; e.kby=(e.kby||0)*kd;
     e.hitCd-=dt;
     if(d < t.r+5 && e.hitCd<=0){ e.hitCd=0.9; battleHurtPlayer(t.dmg); }
+  }
+
+  /* 金币掉落：磁吸拾取 */
+  for(let i=BATTLE.drops.length-1;i>=0;i--){
+    const d=BATTLE.drops[i];
+    d.age+=dt;
+    const dx=BATTLE._px-d.x, dy=BATTLE._py-d.y, dist=Math.hypot(dx,dy)||1;
+    if(dist<34){ d.vx+=dx/dist*70*dt; d.vy+=dy/dist*70*dt; }
+    else { d.vx*=Math.exp(-4*dt); d.vy*=Math.exp(-4*dt); }
+    d.x+=d.vx*dt; d.y+=d.vy*dt;
+    if(dist<5){
+      BATTLE.coins+=d.val;
+      if(typeof Sfx!=="undefined") Sfx.play("coin");
+      BATTLE.drops.splice(i,1);
+    } else if(d.age>25) BATTLE.drops.splice(i,1);
   }
 
   /* 敌方弹 */
@@ -290,10 +385,6 @@ function battleTick(dt, playerPos, moving){
     if(dead) BATTLE.ebullets.splice(i,1);
   }
 
-  for(let i=BATTLE.fx.length-1;i>=0;i--){
-    BATTLE.fx[i].age+=dt;
-    if(BATTLE.fx[i].age>=BATTLE.fx[i].dur) BATTLE.fx.splice(i,1);
-  }
-
+  battleAgeFx(dt);
   battleTryLevelUp();
 }
