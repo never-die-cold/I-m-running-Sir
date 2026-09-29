@@ -70,6 +70,9 @@
 
   .overlay .stars { font-size:26px; letter-spacing:6px; color:#f9c63a; margin:4px 0 10px; }
   .overlay .stars i { font-style:normal; color:#3a4644; }
+  .lootRow { opacity:0; transform:translateY(10px); animation:lootIn .45s forwards;
+    color:#eef3f1; font-size:13px; line-height:1.9; }
+  @keyframes lootIn { to { opacity:1; transform:none; } }
 
   /* 开始菜单 */
   #startOverlay .card { max-width:660px; text-align:left; }

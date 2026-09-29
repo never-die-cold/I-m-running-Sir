@@ -98,6 +98,9 @@ function refreshBattleOverlays(){
   if(session.mode==="battle" && BATTLE.state==="dead"){
     if(!isResultVisible()) showResult("你 倒 下 了");
   }
+  if(session.mode==="battle" && BATTLE.state==="victory"){
+    if(!isResultVisible()) showResult("通 关 ！");
+  }
 }
 function _skillLvTag(id){
   const p=BATTLE.player;
@@ -208,17 +211,20 @@ function showResult(title){
   const s=Progress.rateRun(session, session.mode==="battle"?BATTLE:null);
   $("deadTitle").textContent=title;
   $("deadStars").innerHTML=starsText(s);
+  /* 战利品瀑布：逐条弹出 */
+  const rows=[];
   if(session.mode==="battle"){
-    $("deadStats").innerHTML=
-      "推进站点 <b>"+BATTLE.wave+" / "+BATTLE.roomsTotal+"</b> · 击杀 <b>"+BATTLE.kills+"</b> · 等级 <b>Lv."+BATTLE.level+"</b><br>"+
-      "本次里程 <b>"+(session.recordedDist/1000).toFixed(2)+" km</b> · 用时 <b>"+fmtDur(session.duration)+
-      "</b> · 金币 <b>💰+"+(BATTLE.coins||0)+"</b>";
+    rows.push("💰 金币 +"+(BATTLE.coins||0));
+    rows.push("🗺 推进站点 "+BATTLE.wave+" / "+BATTLE.roomsTotal);
+    rows.push("🗡 击杀 "+BATTLE.kills+" · 等级 Lv."+BATTLE.level);
+    rows.push("🏃 里程 "+(session.recordedDist/1000).toFixed(2)+" km · 用时 "+fmtDur(session.duration));
   } else {
     const pace=session.duration>1?1000*session.duration/Math.max(1,session.recordedDist):0;
-    $("deadStats").innerHTML=
-      "里程 <b>"+(session.recordedDist/1000).toFixed(2)+" km</b> · 用时 <b>"+fmtDur(session.duration)+
-      "</b> · 均配速 <b>"+(pace>0?fmtPace(pace):"--")+"</b>";
+    rows.push("🏃 里程 "+(session.recordedDist/1000).toFixed(2)+" km");
+    rows.push("⏱ 用时 "+fmtDur(session.duration)+(pace>0?" · 均配速 "+fmtPace(pace):""));
   }
+  $("deadStats").innerHTML=rows.map((t,i)=>
+    '<div class="lootRow" style="animation-delay:'+(i*0.16+0.15).toFixed(2)+'s">'+t+"</div>").join("");
   $("deadOverlay").style.display="flex";
   boot.paused=true;
 }

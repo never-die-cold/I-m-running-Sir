@@ -274,11 +274,42 @@ const test = `
   for (let i = 0; i < 50; i++) battleTick(0.1, session.worldPos, false);
   check("second station cleared", cp1.cleared === true && BATTLE.enemies.length === 0);
   while (BATTLE.state === "levelup") applySkill(0);
+  check("evolution card offered and applies", (() => {
+    BATTLE.player.arrows = 2; BATTLE.player.pierce = 2;
+    BATTLE.hitStop = 0;
+    BATTLE.exp = BATTLE.expNext;
+    battleTick(0.05, session.worldPos, false);
+    if (BATTLE.state !== "levelup") return false;
+    const idx = BATTLE.choices.findIndex(c => c.id === "evoRain");
+    if (idx < 0) return false;
+    applySkill(idx);
+    while (BATTLE.state === "levelup") applySkill(0);
+    return BATTLE.player.evo.rain === true && BATTLE.player.arrows === 3 && BATTLE.player.pierce === 3;
+  })());
   const cp2 = session.checkpoints[2];
   session.worldPos = { x: cp2.localMeters.x, y: cp2.localMeters.y };
   battleTick(0.05, session.worldPos, false);
   check("final station is a boss room", BATTLE.wave === 3 &&
     BATTLE.enemies.some(e => e.type === "boss") && BATTLE.enemies.length === 4);
+
+  /* 通关：清空末站 BOSS 房 → victory + 3★ */
+  BATTLE.enemies.forEach(e => { e.hp = 1; e.x = session.worldPos.x + 6; e.y = session.worldPos.y; });
+  BATTLE.bullets.length = 0; BATTLE.fireCd = 0;
+  for (let i = 0; i < 60; i++) {
+    BATTLE.player.hp = BATTLE.player.maxHp;               // 测试免死：专注验证通关流程
+    battleTick(0.1, session.worldPos, false);
+    while (BATTLE.state === "levelup") applySkill(0);   // 升级弹层期间战斗冻结，选牌继续
+  }
+  BATTLE.hitStop = 0;
+  battleTick(0.1, session.worldPos, false);
+  battleTick(0.1, session.worldPos, false);
+  check("clearing final boss room wins the run", BATTLE.state === "victory" &&
+    BATTLE.victory === true && cp2.cleared === true && BATTLE.enemies.length === 0);
+  check("victory rates 3 stars", Progress.rateRun(session, BATTLE) === 3);
+  check("victory grants bonus coins", BATTLE.coins >= 50);
+  /* 复位战斗状态供后续检查 */
+  session.setMode("free"); resetRun();
+  session.setMode("battle"); resetRun();
 
   /* 局外天赋 / 不屈复活 / 金币入账 */
   check("meta talents apply at battle start", (() => {

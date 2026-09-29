@@ -48,9 +48,20 @@ const SKILLS = [
   { id:"range",    n:"鹰眼",     d:"索敌射程 +25%",          ok:p=>p.range<420,       ap:p=>{p.range*=1.25;} },
 ];
 
+/* 技能合成（吸血鬼幸存者式）：两系成型后必出合成牌 */
+const EVO_DEFS = [
+  { id:"evoRain",     n:"★ 箭雨",  d:"多重+穿透融合：箭 +1、穿透 +1",
+    ok:p=>!p.evo.rain && p.arrows>=2 && p.pierce>=2,
+    ap:p=>{ p.evo.rain=true; p.arrows++; p.pierce++; } },
+  { id:"evoFission",  n:"★ 裂变弹", d:"弹射+鹰眼融合：弹射 +1、攻击 ×1.25、射程 +15%",
+    ok:p=>!p.evo.fission && p.ricochet>=2 && p.range>=180,
+    ap:p=>{ p.evo.fission=true; p.ricochet++; p.atk*=1.25; p.range*=1.15; } }
+];
+
 function battleReset(seed, session){
   BATTLE.player = { hp:100, maxHp:100, atk:10, atkInterval:0.55, arrows:1, pierce:0,
-                    ricochet:0, moveMul:1, range:150, nova:0, novaCd:0 };
+                    ricochet:0, moveMul:1, range:150, nova:0, novaCd:0,
+                    evo:{rain:false, fission:false} };
   BATTLE.enemies=[]; BATTLE.bullets=[]; BATTLE.ebullets=[]; BATTLE.fx=[];
   BATTLE.dmgTexts=[]; BATTLE.drops=[];
   BATTLE.shake=0; BATTLE.hitStop=0; BATTLE.coins=0;
@@ -165,12 +176,13 @@ function battleTryLevelUp(){
 
 function battleRollChoices(){
   const p=BATTLE.player;
+  const evos=EVO_DEFS.filter(s=>s.ok(p));                 // 合成牌优先必出
   const pool=SKILLS.filter(s=>s.ok(p));
   for(let i=pool.length-1;i>0;i--){
     const j=Math.floor(BATTLE.rng.next()*(i+1));
     const t=pool[i]; pool[i]=pool[j]; pool[j]=t;
   }
-  BATTLE.choices=pool.slice(0,3);
+  BATTLE.choices=evos.concat(pool.slice(0,3-evos.length));
   while(BATTLE.choices.length<3) BATTLE.choices.push(SKILLS.find(s=>s.id==="heal"));
 }
 
@@ -291,7 +303,7 @@ function battleTick(dt, playerPos, moving){
   }
   BATTLE.enemies=BATTLE.enemies.filter(e=>e.hp>0);
 
-  /* 本站清空 → 打卡 + 通关经验 */
+  /* 本站清空 → 打卡 + 通关经验；末站清空 → 通关胜利 */
   if(BATTLE.room && BATTLE.enemies.length===0){
     BATTLE.room.cleared=true;
     BATTLE.exp+=8;
@@ -299,6 +311,17 @@ function battleTick(dt, playerPos, moving){
     BATTLE.fx.push({x:BATTLE.room.localMeters.x,y:BATTLE.room.localMeters.y,age:0,dur:0.9,
                     r:BATTLE.room.radius,color:"#f9c63a"});
     BATTLE.room=null;
+    if(BATTLE.session && !BATTLE.session.checkpoints.some(c=>!c.cleared)){
+      BATTLE.victory=true;
+      BATTLE.coins+=50;                                  // 通关奖励
+      BATTLE.state="victory";
+      BATTLE.fx.push({x:BATTLE._px,y:BATTLE._py,age:0,dur:1.4,r:120,color:"#ffd23f"});
+      for(let i=0;i<24&&BATTLE.drops.length<80;i++){     // 金币喷泉
+        const a=i/24*Math.PI*2;
+        BATTLE.drops.push({x:BATTLE._px,y:BATTLE._py,vx:Math.cos(a)*9,vy:Math.sin(a)*9,age:0,val:2});
+      }
+      return;
+    }
     battleTryLevelUp();
   }
 

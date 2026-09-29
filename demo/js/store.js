@@ -129,9 +129,12 @@ const Progress = {
     }
   },
 
-  /* 星级：3★=均配速≤5'30"；战斗按波次；不足成局 0★ */
+  /* 星级：3★=均配速≤5'30"；战斗按波次（通关必 3★）；不足成局 0★ */
   rateRun(session, battle) {
-    if (battle) return battle.wave >= 5 ? 3 : (battle.wave >= 3 ? 2 : (battle.kills > 0 ? 1 : 0));
+    if (battle) {
+      if (battle.victory) return 3;
+      return battle.wave >= 5 ? 3 : (battle.wave >= 3 ? 2 : (battle.kills > 0 ? 1 : 0));
+    }
     const dist = session.recordedDist, dur = session.duration;
     if (dist < 1000 || dur < 60) return 0;
     const pace = 1000 * dur / dist;

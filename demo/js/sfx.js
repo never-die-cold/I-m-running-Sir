@@ -49,6 +49,7 @@ const Sfx = (() => {
         case "buy":        beep(523, .07, "triangle", 0, .3); beep(784, .1, "triangle", .07, .3); break;
         case "hurt":       beep(110, .09, "sawtooth", 0, .28); break;
         case "death":      [300, 220, 150].forEach((f, i) => beep(f, .20, "sawtooth", i * .13, .32)); break;
+        case "victory":    [523, 659, 784, 1047, 1319].forEach((f, i) => beep(f, .22, "triangle", i * .11, .35)); break;
         case "click":      beep(880, .04, "sine", 0, .18); break;
       }
     },

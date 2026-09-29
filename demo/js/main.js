@@ -167,6 +167,7 @@ function loop(nowMs){
       battleTick(dt, session.worldPos, moving);
       if(BATTLE.state==="levelup" && _prevBState!=="levelup") Sfx.play("levelup");
       if(BATTLE.state==="dead" && _prevBState!=="dead") Sfx.play("death");
+      if(BATTLE.state==="victory" && _prevBState!=="victory") Sfx.play("victory");
       if(BATTLE.player.hp<_prevHp) Sfx.play("hurt");
       if(BATTLE.bullets.length>_prevBullets && now-_lastShootT>0.08){ Sfx.play("shoot"); _lastShootT=now; }
       _prevBState=BATTLE.state; _prevBullets=BATTLE.bullets.length; _prevHp=BATTLE.player.hp;
