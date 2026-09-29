@@ -24,16 +24,23 @@ function draw(){
   const L=cam.x-halfW, R=cam.x+halfW, Bo=cam.y-halfH, T=cam.y+halfH;
 
   drawGroundGrid(L,R,Bo,T,z);
+  drawGrass();
   drawWater();
   drawForest();
   for(const rd of CAMPUS.roads){
     if(rd.isTrack) continue;
     if(rd.style==="tram"){ drawRibbon(rd.pts, rd.w, "rgba(139,95,191,.55)", false, [10,8]); continue; }
-    drawRibbon(rd.pts, rd.w, "#3b3f45", rd.closed);
+    drawRibbon(rd.pts, rd.w+3.2, "rgba(0,0,0,.42)", rd.closed);
+    drawRibbon(rd.pts, rd.w, "#3d424a", rd.closed);
+    if(rd.w>=8) drawRibbon(rd.pts, 1.1, "rgba(222,228,214,.30)", rd.closed, [7,9]);
   }
   drawTrails();
   drawRibbon(CAMPUS.mainRoute.pts, 1.8, "rgba(249,198,58,.30)", true, [5,6]);
-  for(const rd of CAMPUS.roads){ if(rd.isTrack) drawRibbon(rd.pts, rd.w, "#8a4a32", rd.closed); }
+  for(const rd of CAMPUS.roads){
+    if(!rd.isTrack) continue;
+    drawRibbon(rd.pts, rd.w+2.5, "rgba(0,0,0,.35)", rd.closed);
+    drawRibbon(rd.pts, rd.w, "#8a4a32", rd.closed);
+  }
   for(const b of CAMPUS.buildings) drawBuilding(b);
   drawLandmarks();
   drawCheckpoints();
@@ -47,6 +54,7 @@ function draw(){
   if(tint.overlay){ ctx.fillStyle=tint.overlay; ctx.fillRect(0,0,W,H); }
   if(ENV.isCloudy()){ ctx.fillStyle="rgba(130,140,150,.10)"; ctx.fillRect(0,0,W,H); }
   if(ENV.isRain()){ ctx.fillStyle="rgba(50,70,100,.16)"; ctx.fillRect(0,0,W,H); drawRainFx(); }
+  drawVignette();
   drawMinimap();
 }
 
@@ -73,17 +81,28 @@ function drawNav(){
 }
 
 function drawWater(){
+  const t=performance.now()/1000;
   for(const w of (CAMPUS.water||[])){
     if(w.c){
       const [x,y]=w2s(w.c.x,w.c.y);
       const rx=w.rx*cam.zoom, ry=w.ry*cam.zoom;
       if(x+rx<-20||x-rx>W+20||y+ry<-20||y-ry>H+20) continue;
-      ctx.fillStyle="#16324a";
+      const g=ctx.createLinearGradient(x,y-ry,x,y+ry);
+      g.addColorStop(0,"#1e4563"); g.addColorStop(1,"#122a42");
+      ctx.fillStyle=g;
       ctx.beginPath(); ctx.ellipse(x,y,rx,ry,0,0,7); ctx.fill();
-      ctx.strokeStyle="rgba(90,160,210,.35)"; ctx.lineWidth=1.5; ctx.stroke();
+      ctx.strokeStyle="rgba(110,180,225,.4)"; ctx.lineWidth=1.5; ctx.stroke();
+      /* 涟漪波光 */
+      for(let i=0;i<3;i++){
+        const ph=(t*0.4+i*0.33)%1;
+        ctx.strokeStyle="rgba(150,205,240,"+(0.20*(1-ph)).toFixed(2)+")";
+        ctx.lineWidth=1.2;
+        ctx.beginPath(); ctx.ellipse(x,y,rx*0.15+rx*0.7*ph,ry*0.15+ry*0.7*ph,0,0,7); ctx.stroke();
+      }
     } else {
+      drawRibbon(w.pts, w.w+3, "rgba(0,0,0,.30)", false);
       drawRibbon(w.pts, w.w, "#16324a", false);
-      drawRibbon(w.pts, Math.max(1,w.w*0.25), "rgba(90,160,210,.30)", false);
+      drawRibbon(w.pts, Math.max(1,w.w*0.22), "rgba(90,160,210,.35)", false);
     }
   }
 }
@@ -94,9 +113,52 @@ function drawForest(){
     const [x,y]=w2s(t.x,t.y);
     if(x<-16||x>W+16||y<-16||y>H+16) continue;
     const r=Math.max(1,t.r*cam.zoom);
-    ctx.fillStyle = t.tone>0.5 ? "#1c3226" : "#213b2c";
+    ctx.fillStyle="rgba(0,0,0,.22)";
+    ctx.beginPath(); ctx.ellipse(x+r*0.28,y+r*0.38,r*0.9,r*0.48,0,0,7); ctx.fill();
+    ctx.fillStyle = t.tone>0.5 ? "#1c3226" : "#224030";
     ctx.beginPath(); ctx.arc(x,y,r,0,7); ctx.fill();
+    if(r>2.5){
+      ctx.fillStyle="rgba(255,255,255,.07)";
+      ctx.beginPath(); ctx.arc(x-r*0.25,y-r*0.28,r*0.55,0,7); ctx.fill();
+    }
   }
+}
+
+/* 草地斑块（确定性生成，避让道路/建筑） */
+let _grass=null;
+function drawGrass(){
+  if(cam.zoom<0.10) return;
+  if(!_grass){
+    _grass=[];
+    const rng=new Rng(20260928);
+    const b=CAMPUS.bounds;
+    for(let i=0;i<90;i++){
+      const x=rng.range(b.minX,b.maxX), y=rng.range(b.minY,b.maxY);
+      if(_nearAnyRoad(x,y,CAMPUS.roads,12)) continue;
+      if(_inAnyBuilding(x,y,CAMPUS.buildings,14)) continue;
+      _grass.push({x,y,rx:16+rng.next()*34,ry:10+rng.next()*22,tone:rng.next()});
+    }
+  }
+  for(const g of _grass){
+    const [x,y]=w2s(g.x,g.y);
+    const rx=g.rx*cam.zoom, ry=g.ry*cam.zoom;
+    if(x+rx<-10||x-rx>W+10||y+ry<-10||y-ry>H+10) continue;
+    ctx.fillStyle = g.tone>0.5 ? "rgba(44,62,34,.30)" : "rgba(28,40,24,.32)";
+    ctx.beginPath(); ctx.ellipse(x,y,rx,ry,0,0,7); ctx.fill();
+  }
+}
+
+/* 暗角（缓存径向渐变） */
+let _vig=null,_vigW=0,_vigH=0;
+function drawVignette(){
+  if(!_vig||_vigW!==W||_vigH!==H){
+    _vigW=W; _vigH=H;
+    _vig=ctx.createRadialGradient(W/2,H/2,Math.min(W,H)*0.46,W/2,H/2,Math.max(W,H)*0.74);
+    _vig.addColorStop(0,"rgba(0,0,0,0)");
+    _vig.addColorStop(1,"rgba(0,0,0,.38)");
+  }
+  ctx.fillStyle=_vig;
+  ctx.fillRect(0,0,W,H);
 }
 
 function drawTrails(){
@@ -158,30 +220,47 @@ function drawRibbon(pts, width, color, closed, dash){
 
 function drawBuilding(b){
   const c=BUILDING_COLORS[b.k]||[100,100,100];
-  const [x,y]=w2s(b.c.x+b.s.x/2, b.c.y+b.s.y/2);
-  const w=b.s.x*cam.zoom, h=b.s.y*cam.zoom;
-  const rx=x-w, ry=y;
+  const z=cam.zoom;
+  const [cx,cy]=w2s(b.c.x, b.c.y);
+  const w=b.s.x*z, h=b.s.y*z;
+  /* 伪 2.5D：屋面 + 立面挤出（视野远时压扁保持可读） */
+  const lift=Math.max(3.5, Math.min(16,(b.s.x+b.s.y)*0.055)) * Math.min(1, z*2.4);
+  const rx=cx-w/2, ry=cy-h/2;
+  if(rx+w<-60||rx>W+60||ry+h>H+60||ry-lift<-60) return;
+  const dk=Math.round(c[0]*0.52), dg=Math.round(c[1]*0.52), db=Math.round(c[2]*0.52);
 
+  /* 投影 */
+  ctx.fillStyle="rgba(0,0,0,.30)";
+  ctx.fillRect(rx+4, ry+5, w, h);
+  /* 立面（朝南墙面） */
+  ctx.fillStyle=`rgb(${dk},${dg},${db})`;
+  ctx.fillRect(rx, ry+h-lift, w, lift);
+  /* 屋面 */
   ctx.fillStyle=`rgb(${c[0]},${c[1]},${c[2]})`;
-  ctx.fillRect(rx,ry,w,h);
-  ctx.fillStyle=`rgba(255,255,255,.10)`;
-  ctx.fillRect(rx,ry,w,Math.max(1,h*0.14));
-  ctx.strokeStyle=`rgba(0,0,0,.45)`; ctx.lineWidth=1;
-  ctx.strokeRect(rx+.5,ry+.5,w-1,h-1);
+  ctx.fillRect(rx, ry-lift, w, h);
+  /* 屋面高光 */
+  ctx.fillStyle="rgba(255,255,255,.10)";
+  ctx.fillRect(rx, ry-lift, w, Math.max(1.5,h*0.12));
+  /* 描边 */
+  ctx.strokeStyle="rgba(0,0,0,.5)"; ctx.lineWidth=1;
+  ctx.strokeRect(rx+.5, ry-lift+.5, w-1, h+lift-1);
 
-  /* 夜间窗户灯（确定性伪随机亮窗） */
+  /* 夜间窗灯：屋面点缀 + 立面一排暖窗 */
   if(ENV.isNight() && w>14 && h>10){
     ctx.fillStyle="rgba(255,214,120,.75)";
-    for(let yy=ry+4; yy<ry+h-4; yy+=7)
+    for(let yy=ry-lift+4; yy<ry-lift+h-4; yy+=7)
       for(let xx=rx+4; xx<rx+w-5; xx+=7)
         if(((xx*13+yy*7)|0)%5<2) ctx.fillRect(xx,yy,2.2,2.6);
+    ctx.fillStyle="rgba(255,190,90,.62)";
+    for(let xx=rx+5; xx<rx+w-5; xx+=9)
+      ctx.fillRect(xx, ry+h-lift+1.5, 3.2, Math.max(1.5,lift-3));
   }
 
   if(w>62 && h>18){
     ctx.fillStyle="rgba(235,242,240,.72)";
     ctx.font=`${Math.min(12,Math.max(9,h*0.24))}px "Microsoft YaHei",sans-serif`;
     ctx.textAlign="center"; ctx.textBaseline="middle";
-    ctx.fillText(b.n, rx+w/2, ry+h/2);
+    ctx.fillText(b.n, rx+w/2, ry-lift+h/2);
   }
 }
 
