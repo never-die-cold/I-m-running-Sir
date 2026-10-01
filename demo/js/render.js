@@ -366,6 +366,19 @@ function drawBattle(){
       ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(px,py); ctx.stroke();
       ctx.setLineDash([]);
     }
+    /* 精英怪金圈 + BOSS 开火预警 */
+    if(e.elite){
+      ctx.strokeStyle="rgba(255,210,63,"+(0.55+0.35*Math.sin(BATTLE.time*5)).toFixed(2)+")";
+      ctx.lineWidth=2;
+      ctx.beginPath(); ctx.arc(x,y,r+3,0,7); ctx.stroke();
+      ctx.fillStyle="#ffd23f"; ctx.font="bold 10px sans-serif"; ctx.textAlign="center";
+      ctx.fillText("★", x, y-r-12);
+    }
+    if(e.type==="boss" && e.fireT<0.45){
+      ctx.strokeStyle="rgba(255,80,60,"+(0.4+0.5*Math.sin(BATTLE.time*22)).toFixed(2)+")";
+      ctx.lineWidth=2.5;
+      ctx.beginPath(); ctx.arc(x,y,r+6,0,7); ctx.stroke();
+    }
     if(e.type==="boss"){
       ctx.strokeStyle="rgba(255,210,63,.9)"; ctx.lineWidth=2;
       ctx.beginPath(); ctx.arc(x,y,r+3+Math.sin(BATTLE.time*6)*1.5,0,7); ctx.stroke();
@@ -431,6 +444,9 @@ function drawPlayer(){
     : { x:0, y:-1 };
 
   ctx.save();
+  /* 翻滚无敌帧闪烁 */
+  const blink=(BATTLE.invuln||0)>0 && Math.floor(BATTLE.time*18)%2===0;
+  if(blink) ctx.globalAlpha=0.45;
   /* 脚下阴影 */
   ctx.fillStyle="rgba(0,0,0,.30)";
   ctx.beginPath(); ctx.ellipse(x+2,y+8,9,4,0,0,7); ctx.fill();

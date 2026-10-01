@@ -348,12 +348,72 @@ const test = `
     return ok;
   })());
 
+  /* 翻滚无敌帧 / 精英掉落 / BOSS 双弹幕 */
+  check("battle dash grants i-frames", (() => {
+    session.setMode("battle"); resetRun();
+    const cpD = session.checkpoints[0];
+    session.worldPos = { x: cpD.localMeters.x, y: cpD.localMeters.y };
+    battleDash(1, 0);
+    battleTick(0.05, session.worldPos, false);          // dash 0.17 / invuln 0.25
+    BATTLE.enemies = [{ id: 9003, type: "chaser", x: BATTLE._px, y: BATTLE._py, hp: 999, maxHp: 999,
+      fireT: 0, dashT: 0, dashVx: 0, dashVy: 0, dashLeft: 0, hitCd: 0, flash: 0, tele: 0, elite: false, sign: 1 }];
+    const hp0 = BATTLE.player.hp;
+    battleTick(0.10, session.worldPos, false);          // 无敌帧内接触不掉血
+    const noDmg = BATTLE.player.hp === hp0;
+    console.log("   [dbg dash] noDmg=" + noDmg + " hp=" + BATTLE.player.hp + " hp0=" + hp0 +
+      " inv=" + BATTLE.invuln + " hitStop=" + BATTLE.hitStop + " hitCd=" +
+      (BATTLE.enemies[0] ? BATTLE.enemies[0].hitCd : "gone") + " room=" + (BATTLE.room ? BATTLE.room.index : null) +
+      " state=" + BATTLE.state);
+    BATTLE.invuln = 0;
+    BATTLE.enemies[0].hitCd = 0;                        // 无敌帧内接触也会消耗怪的攻击冷却
+    BATTLE.hitStop = 0;
+    battleTick(0.10, session.worldPos, false);          // 无敌结束 → 受伤
+    console.log("   [dbg dash2] hp=" + BATTLE.player.hp + " cd=" + BATTLE.dashCd.toFixed(2));
+    return noDmg && BATTLE.player.hp < hp0 && BATTLE.dashCd > 0;
+  })());
+  check("elite kill drops 5 coins", (() => {
+    BATTLE.enemies = [];
+    BATTLE.bullets = []; BATTLE.ebullets = []; BATTLE.drops = [];
+    const c0 = BATTLE.coins;
+    BATTLE.enemies.push({ id: 9004, type: "chaser", elite: true, x: BATTLE._px + 30, y: BATTLE._py,
+      hp: 1, maxHp: 40, fireT: 0, dashT: 0, dashVx: 0, dashVy: 0, dashLeft: 0, hitCd: 0, flash: 0, tele: 0, sign: 1 });
+    BATTLE.fireCd = 0;
+    for (let i = 0; i < 18; i++) battleTick(0.1, session.worldPos, false);
+    return BATTLE.enemies.length === 0 && BATTLE.coins >= c0 + 5;
+  })());
+  check("boss alternates ring and aimed spread", (() => {
+    while (BATTLE.state === "levelup") applySkill(0);   // 精英击杀可能触发升级暂停
+    BATTLE.hitStop = 0;
+    BATTLE.enemies = [{ id: 9005, type: "boss", x: BATTLE._px - 60, y: BATTLE._py, hp: 999, maxHp: 999,
+      fireT: 0.05, dashT: 0, dashVx: 0, dashVy: 0, dashLeft: 0, hitCd: 0, flash: 0, tele: 0, elite: false, sign: 1, phase: 0 }];
+    BATTLE.ebullets = []; BATTLE.bullets = []; BATTLE.drops = [];
+    BATTLE.player.hp = BATTLE.player.maxHp;
+    battleTick(0.1, session.worldPos, false);           // phase1：环形 10
+    const ring = BATTLE.ebullets.length;
+    BATTLE.ebullets = [];
+    for (let i = 0; i < 26; i++) { BATTLE.player.hp = BATTLE.player.maxHp; battleTick(0.1, session.worldPos, false); }
+    const spread = BATTLE.ebullets.length;              // phase2：扇形 5（含顿帧耗时冗余）
+    console.log("   [dbg boss] ring=" + ring + " spread=" + spread + " phase=" +
+      (BATTLE.enemies[0] ? BATTLE.enemies[0].phase : "gone") + " fireT=" +
+      (BATTLE.enemies[0] ? BATTLE.enemies[0].fireT.toFixed(2) : "-") + " room=" + (BATTLE.room ? BATTLE.room.index : null) +
+      " en=" + BATTLE.enemies.length);
+    BATTLE.enemies = []; BATTLE.ebullets = [];
+    BATTLE.hitStop = 0;
+    return ring === 10 && spread === 5;
+  })());
+
+  while (BATTLE.state === "levelup") applySkill(0);
+  BATTLE.hitStop = 0;
   BATTLE.enemies = []; BATTLE.ebullets = []; BATTLE.bullets = [];
+  BATTLE.hitStop = 0;                                   // 清残留顿帧
   BATTLE.enemies.push({ id: 9001, type: "chaser", x: BATTLE._px, y: BATTLE._py, hp: 999, maxHp: 999,
-    fireT: 0, dashT: 0, dashVx: 0, dashVy: 0, dashLeft: 0, hitCd: 0, flash: 0, sign: 1 });
+    fireT: 0, dashT: 0, dashVx: 0, dashVy: 0, dashLeft: 0, hitCd: 0, flash: 0, tele: 0, elite: false, sign: 1 });
+  const hpB = BATTLE.player.hp;
   battleTick(0.1, session.worldPos, false);
-  check("enemy contact damages player", BATTLE.player.hp < 100);
+  console.log("   [dbg contact] hp=" + BATTLE.player.hp + "/" + hpB + " state=" + BATTLE.state);
+  check("enemy contact damages player", BATTLE.player.hp < hpB);
   BATTLE.player.hp = 5;
+  BATTLE.hitStop = 0;
   battleTick(1.0, session.worldPos, false);
   check("player dies at 0 hp", BATTLE.state === "dead" && BATTLE.player.hp === 0);
 

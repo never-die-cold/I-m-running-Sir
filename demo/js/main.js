@@ -135,7 +135,11 @@ function init(){
   $("mbPause").addEventListener("click", ()=>togglePause());
   $("mbAuto").addEventListener("click", ()=>{ boot.autopilot=!boot.autopilot; syncAutoBtn(); Sfx.play("click"); });
   const sb=$("mbSprint");
-  sb.addEventListener("pointerdown",e=>{ e.preventDefault(); keys.ShiftRightMobile=true; });
+  sb.addEventListener("pointerdown",e=>{
+    e.preventDefault();
+    if(session.mode==="battle") tryBattleDash();       /* 战斗=翻滚 */
+    else keys.ShiftRightMobile=true;
+  });
   const up=()=>{ keys.ShiftRightMobile=false; };
   sb.addEventListener("pointerup",up); sb.addEventListener("pointercancel",up); sb.addEventListener("pointerleave",up);
 
@@ -143,7 +147,16 @@ function init(){
   requestAnimationFrame(loop);
 }
 
-let _dustT=0, _lastShootT=0, _prevBState="fighting", _prevBullets=0, _prevHp=100;
+function tryBattleDash(){
+  if(session.mode!=="battle"||BATTLE.state!=="fighting") return;
+  if((BATTLE.dashCd||0)>0||(BATTLE.dashT||0)>0) return;
+  const dir=readInput();
+  let dx=dir.x, dy=dir.y;
+  if(dx===0&&dy===0){ dx=session.velocity.x; dy=session.velocity.y; }  // 无输入沿当前朝向
+  battleDash(dx,dy);
+}
+
+let _dustT=0, _lastShootT=0, _prevBState="fighting", _prevBullets=0, _prevHp=100, _prevShift=false;
 function loop(nowMs){
   const now=nowMs/1000;
   let realDt=Math.min(0.05, now-boot.lastTime);
@@ -161,9 +174,12 @@ function loop(nowMs){
     let moving=false;
     if(battleMode && BATTLE.state==="fighting"){
       const dir=readInput();
-      const sprint = !!(keys.ShiftLeft||keys.ShiftRight||keys.ShiftRightMobile);
+      const shiftNow=!!(keys.ShiftLeft||keys.ShiftRight);
+      if(shiftNow&&!_prevShift) tryBattleDash();      /* 战斗模式：Shift=翻滚 */
+      _prevShift=shiftNow;
       moving = dir.x!==0||dir.y!==0;
-      session.tick(dt, wallMs, dir, boot.targetSpeed*BATTLE.player.moveMul, sprint);
+      /* 战斗内不常驻冲刺（翻滚替代），体力仅跑步模式消耗 */
+      session.tick(dt, wallMs, dir, boot.targetSpeed*BATTLE.player.moveMul, false);
       battleTick(dt, session.worldPos, moving);
       if(BATTLE.state==="levelup" && _prevBState!=="levelup") Sfx.play("levelup");
       if(BATTLE.state==="dead" && _prevBState!=="dead") Sfx.play("death");
