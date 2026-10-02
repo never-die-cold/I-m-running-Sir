@@ -19,8 +19,8 @@ function w2s(x,y){ return [ (x-cam.x)*cam.zoom + W/2, H/2 - (y-cam.y)*cam.zoom ]
 function draw(){
   ctx.fillStyle="#07090a"; ctx.fillRect(0,0,W,H);
 
-  /* 战斗震屏：世界层整体偏移 */
-  const sh=BATTLE.shake||0;
+  /* 战斗震屏：世界层整体偏移（可在设置关闭） */
+  const sh=(typeof SETT==="undefined"||SETT.data.shake)?(BATTLE.shake||0):0;
   ctx.save();
   if(sh>0.01) ctx.translate((Math.random()-.5)*sh*16,(Math.random()-.5)*sh*16);
 

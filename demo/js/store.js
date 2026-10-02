@@ -43,6 +43,20 @@ const ACH_DEFS = [
   { id:"rain_runner",   n:"雨中曲",     d:"雨中累计奔跑 60 秒" }
 ];
 
+/* 设置项（音量/震屏/伤害数字），start menu 可调 */
+const SETT = {
+  data: null,
+  load() {
+    this.data = Store.read("settings", { volume: 0.18, shake: true, dmgNum: true });
+    if (this.data.volume === undefined) this.data.volume = 0.18;
+    if (this.data.shake === undefined) this.data.shake = true;
+    if (this.data.dmgNum === undefined) this.data.dmgNum = true;
+    return this.data;
+  },
+  save() { Store.write("settings", this.data); }
+};
+SETT.load();
+
 /* 局外天赋（金币购买，战斗模式开局生效） */
 const META_DEFS = [
   { id:"atk",    n:"利刃",   d:"攻击力 +8%/级",   max:5, cost:lv=>60*(lv+1) },

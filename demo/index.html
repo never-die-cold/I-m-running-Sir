@@ -94,6 +94,9 @@
   #startRecords { margin-top:10px; font-size:11.5px; color:#8d9a96; line-height:1.8;
     background:rgba(0,0,0,.35); border-radius:4px; padding:8px 10px; }
   #startRecords b { color:#eef3f1; }
+  .setRow { display:flex; gap:10px; align-items:center; color:#9aa7a3; font-size:12px; flex-wrap:wrap; }
+  .volLabel { display:flex; align-items:center; gap:8px; }
+  .setRow input[type=range] { width:130px; accent-color:#f9c63a; }
   #startBtn { display:block; width:100%; margin-top:14px; padding:10px; background:#f9c63a; color:#10130f;
     border:0; border-radius:5px; font-size:15px; font-weight:800; letter-spacing:.4em; cursor:pointer; }
   #startBtn:hover { filter:brightness(1.1); }
@@ -221,6 +224,14 @@
     <div class="chips" id="paceChips"></div>
     <div class="secTitle" id="metaTitle">TALENTS 局外天赋 · 金币 <span id="coinCount">0</span></div>
     <div class="chips" id="metaChips"></div>
+    <div class="secTitle">SETTINGS 设置</div>
+    <div class="setRow">
+      <label class="volLabel">音量
+        <input type="range" id="volSlider" min="0" max="100" value="18">
+      </label>
+      <div class="chip" id="setShake">震屏：开</div>
+      <div class="chip" id="setDmg">伤害数字：开</div>
+    </div>
     <div id="startRecords"></div>
     <button id="startBtn">开 始</button>
   </div>

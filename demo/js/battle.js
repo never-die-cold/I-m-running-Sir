@@ -342,9 +342,9 @@ function battleTick(dt, playerPos, moving){
           /* 击退（沿箭向冲量）+ 伤害数字 + 轻顿帧 */
           e.kbx=(e.kbx||0)+b.vx/BULLET_SPEED*4.2;
           e.kby=(e.kby||0)+b.vy/BULLET_SPEED*4.2;
-          BATTLE.dmgTexts.push({x:e.x+(BATTLE.rng.next()-0.5)*4, y:e.y-t.r-2,
-                                vy:-26, age:0, dur:0.7, text:dmg, crit});
-          BATTLE.hitStop=Math.min(0.08,(BATTLE.hitStop||0)+0.016);
+          if((typeof SETT==="undefined"||SETT.data.dmgNum))
+            BATTLE.dmgTexts.push({x:e.x+(BATTLE.rng.next()-0.5)*4, y:e.y-t.r-2,
+                                  vy:-26, age:0, dur:0.7, text:dmg, crit});          BATTLE.hitStop=Math.min(0.08,(BATTLE.hitStop||0)+0.016);
           BATTLE.fx.push({x:e.x,y:e.y,age:0,dur:0.25,r:t.r,color:"#fff"});
           if(e.hp<=0) battleKill(e);
           if(b.pierce>0){ b.pierce--; }

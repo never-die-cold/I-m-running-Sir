@@ -386,6 +386,27 @@ const test = `
     return BATTLE.player.hp >= hp0 + 10;
   })());
 
+  /* ---- Batch C：设置项（音量/震屏/伤害数字） ---- */
+  check("settings load with defaults", SETT.data.volume === 0.18 && SETT.data.shake === true && SETT.data.dmgNum === true);
+  check("settings volume persists", (() => {
+    SETT.data.volume = 0.5; SETT.save();
+    const v = Store.read("settings", {}).volume;
+    SETT.data.volume = 0.18; SETT.save();
+    return v === 0.5;
+  })());
+  check("dmg-number toggle gates floating text", (() => {
+    SETT.data.dmgNum = false;
+    const eS = BATTLE.enemies[0];
+    const before = BATTLE.dmgTexts.length;
+    const hpS = eS ? eS.hp : 999;
+    if (eS) { eS.x = session.worldPos.x + 12; eS.y = session.worldPos.y; eS.hitsFix = true; }
+    BATTLE.bullets = []; BATTLE.fireCd = 0;
+    for (let i = 0; i < 8; i++) battleTick(0.1, session.worldPos, false);
+    const gated = BATTLE.dmgTexts.length === 0 || BATTLE.dmgTexts.length === before;
+    SETT.data.dmgNum = true;
+    return gated;
+  })());
+
   /* 翻滚无敌帧 / 精英掉落 / BOSS 双弹幕 */
   check("battle dash grants i-frames", (() => {
     session.setMode("battle"); resetRun();

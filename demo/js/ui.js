@@ -174,6 +174,16 @@ function buildStartPanel(){
     });
     metaEl.appendChild(d);
   });
+  /* 设置区：音量 / 震屏 / 伤害数字 */
+  const vol=$("volSlider"), shk=$("setShake"), dmg=$("setDmg");
+  if(vol&&shk&&dmg){
+    vol.value=Math.round(SETT.data.volume*100);
+    shk.textContent="震屏："+(SETT.data.shake?"开":"关");
+    dmg.textContent="伤害数字："+(SETT.data.dmgNum?"开":"关");
+    vol.oninput=()=>{ SETT.data.volume=vol.value/100; SETT.save(); Sfx.setVolume(SETT.data.volume); };
+    shk.onclick=()=>{ SETT.data.shake=!SETT.data.shake; SETT.save(); Sfx.play("click"); buildStartPanel(); };
+    dmg.onclick=()=>{ SETT.data.dmgNum=!SETT.data.dmgNum; SETT.save(); Sfx.play("click"); buildStartPanel(); };
+  }
   const P=Progress.data;
   const bestLines=Object.entries(P.best||{}).map(([k,b])=>{
     const seg=k.split(":"), cid=seg[0], mode=seg[1];
