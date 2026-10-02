@@ -399,12 +399,20 @@ function drawBattle(){
     ctx.beginPath(); ctx.moveTo(9,0); ctx.lineTo(-5,5); ctx.lineTo(-5,-5); ctx.closePath(); ctx.fill();
     ctx.restore();
   }
-  /* 金币掉落 */
+  /* 金币 / 医疗包 */
   for(const d of BATTLE.drops){
     const [x,y]=w2s(d.x,d.y);
-    ctx.fillStyle="#ffd23f";
-    ctx.beginPath(); ctx.arc(x,y,Math.max(2.2,3.2*cam.zoom),0,7); ctx.fill();
-    ctx.strokeStyle="rgba(120,90,0,.7)"; ctx.lineWidth=1; ctx.stroke();
+    if(d.kind==="med"){
+      ctx.fillStyle="#2fae62";
+      ctx.fillRect(x-4,y-4,8,8);
+      ctx.fillStyle="#eafff2";
+      ctx.fillRect(x-1.2,y-3,2.4,6);
+      ctx.fillRect(x-3,y-1.2,6,2.4);
+    } else {
+      ctx.fillStyle="#ffd23f";
+      ctx.beginPath(); ctx.arc(x,y,Math.max(2.2,3.2*cam.zoom),0,7); ctx.fill();
+      ctx.strokeStyle="rgba(120,90,0,.7)"; ctx.lineWidth=1; ctx.stroke();
+    }
   }
   /* 敌方弹 */
   for(const b of BATTLE.ebullets){

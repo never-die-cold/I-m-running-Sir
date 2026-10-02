@@ -33,7 +33,8 @@ const ENEMY_TYPES = {
   chaser:  { hp:22,  speed:2.7, r:6,  dmg:10, exp:3,  color:"#ff6b5a" },
   shooter: { hp:16,  speed:2.0, r:6,  dmg:8,  exp:4,  color:"#ffb84d", fireInterval:2.6, bulletSpeed:9.5 },
   charger: { hp:34,  speed:2.4, r:7,  dmg:14, exp:6,  color:"#e858c8", dashCd:3.4, dashSpeed:13 },
-  boss:    { hp:220, speed:2.6, r:12, dmg:20, exp:40, color:"#ff3b30", fireInterval:1.7, bulletSpeed:8.5 }
+  boss:    { hp:220, speed:2.6, r:12, dmg:20, exp:40, color:"#ff3b30", fireInterval:1.7, bulletSpeed:8.5 },
+  wild:    { hp:8,   speed:2.0, r:5,  dmg:6,  exp:2,  color:"#9ad14b" }
 };
 
 const BULLET_SPEED = 26;
@@ -74,6 +75,9 @@ function battleReset(seed, session){
   BATTLE.session=session||null;
   if(session) BATTLE.roomsTotal=session.checkpoints.length;
   if(typeof Progress!=="undefined") battleApplyMeta();
+  BATTLE._rng2=new Rng((seed===undefined?7:seed)>>>0);   // 独立流：补给/野怪布局，不扰动战斗随机序列
+  if(session) battleSpawnSupplies(session);
+  if(session) battleSpawnRoamers(session);
   BATTLE.rng=new Rng((seed===undefined?20260924:seed)>>>0);
   BATTLE._nextId=1; BATTLE.fireCd=0; BATTLE.novaCd=0; BATTLE.time=0;
 }
@@ -88,6 +92,35 @@ function battleApplyMeta(){
   p.moveMul=1+0.05*(m.spd||0);
   p.atkInterval=0.55/(1+0.07*(m.aspd||0));
   BATTLE.revives=m.revive||0;
+}
+
+/* 赶路补给：主环线上散落金币/医疗包（避开站点圈），磁吸拾取 */
+function battleSpawnSupplies(session){
+  const route=session.mainRoute||session.route;
+  const L=route.length;
+  const nearStation=(p)=>session.checkpoints.some(c=>V.dist(p,c.localMeters)<c.radius+25);
+  for(let i=0;i<10;i++){
+    const p=route.pointAt(BATTLE._rng2.range(L*0.03,L*0.97));
+    p.x+=(BATTLE._rng2.next()-0.5)*14; p.y+=(BATTLE._rng2.next()-0.5)*14;
+    if(nearStation(p)) continue;
+    const med=BATTLE._rng2.next()<0.25;
+    BATTLE.drops.push({x:p.x,y:p.y,vx:0,vy:0,age:0,val:med?12:1,kind:med?"med":"coin"});
+  }
+}
+
+/* 游荡野怪：站点之间的弱怪，靠近 60m 才仇恨；不阻塞清站判定 */
+function battleSpawnRoamers(session){
+  const route=session.mainRoute||session.route;
+  const L=route.length;
+  const n=2+Math.floor(BATTLE._rng2.next()*2);
+  for(let i=0;i<n;i++){
+    const p=route.pointAt(BATTLE._rng2.range(L*0.05,L*0.95));
+    p.x+=(BATTLE._rng2.next()-0.5)*40; p.y+=(BATTLE._rng2.next()-0.5)*40;
+    BATTLE.enemies.push({ id:BATTLE._nextId++, type:"wild", x:p.x, y:p.y,
+      hp:ENEMY_TYPES.wild.hp, maxHp:ENEMY_TYPES.wild.hp,
+      fireT:0, dashT:0, dashVx:0, dashVy:0, dashLeft:0, hitCd:0, flash:0, tele:0,
+      elite:false, aggro:false, wx:p.x, wy:p.y, wt:BATTLE._rng2.range(1,3), sign:1 });
+  }
 }
 
 /* 站点出怪：怪物以打卡点为中心驻守；末站为 BOSS 房 */
@@ -305,6 +338,7 @@ function battleTick(dt, playerPos, moving){
           const crit=BATTLE.rng.next()<0.12;
           const dmg=Math.round(p.atk*(crit?2:1));
           e.hp-=dmg; b.hits.push(e.id); e.flash=0.15;
+          if(e.type==="wild") e.aggro=true;                 /* 打野怪也会拉仇恨 */
           /* 击退（沿箭向冲量）+ 伤害数字 + 轻顿帧 */
           e.kbx=(e.kbx||0)+b.vx/BULLET_SPEED*4.2;
           e.kby=(e.kby||0)+b.vy/BULLET_SPEED*4.2;
@@ -336,8 +370,8 @@ function battleTick(dt, playerPos, moving){
   }
   BATTLE.enemies=BATTLE.enemies.filter(e=>e.hp>0);
 
-  /* 本站清空 → 打卡 + 通关经验；末站清空 → 通关胜利 */
-  if(BATTLE.room && BATTLE.enemies.length===0){
+  /* 本站清空（野怪不算守怪）→ 打卡 + 通关经验；末站清空 → 通关胜利 */
+  if(BATTLE.room && !BATTLE.enemies.some(e=>e.type!=="wild")){
     BATTLE.room.cleared=true;
     BATTLE.exp+=8;
     BATTLE.coins+=6;
@@ -368,6 +402,21 @@ function battleTick(dt, playerPos, moving){
       vx=dx/d*t.speed; vy=dy/d*t.speed;
       const sway=Math.sin(BATTLE.time*2.4+e.id*1.7)*1.15;   /* 正弦侧摆，拒绝直线冲脸 */
       vx+=-dy/d*sway; vy+=dx/d*sway;
+    }
+    else if(e.type==="wild"){
+      if(!e.aggro && d<60) e.aggro=true;                    /* 靠近才仇恨 */
+      if(e.aggro){ vx=dx/d*t.speed; vy=dy/d*t.speed; }
+      else {
+        /* 游荡：周期性换漫游点（独立 rng 流） */
+        e.wt=(e.wt===undefined?2:e.wt)-dt;
+        if(e.wt<=0 || V.dist(e,{x:e.wx,y:e.wy})<3){
+          const na=(BATTLE.rng2?BATTLE.rng2.next():0.5)*Math.PI*2;
+          e.wx=BATTLE._px+(Math.cos(na)-0.3)*60; e.wy=BATTLE._py+(Math.sin(na)-0.3)*60;
+          e.wt=2+(BATTLE.rng2?BATTLE.rng2.next():0.5)*2;
+        }
+        const wd=V.dist(e,{x:e.wx,y:e.wy})||1;
+        vx=(e.wx-e.x)/wd*1.2; vy=(e.wy-e.y)/wd*1.2;
+      }
     }
     else if(e.type==="shooter"){
       if(d>85){ vx=dx/d*t.speed; vy=dy/d*t.speed; }
@@ -438,8 +487,14 @@ function battleTick(dt, playerPos, moving){
     else { d.vx*=Math.exp(-4*dt); d.vy*=Math.exp(-4*dt); }
     d.x+=d.vx*dt; d.y+=d.vy*dt;
     if(dist<5){
-      BATTLE.coins+=d.val;
-      if(typeof Sfx!=="undefined") Sfx.play("coin");
+      if(d.kind==="med"){
+        BATTLE.player.hp=Math.min(BATTLE.player.maxHp,BATTLE.player.hp+12);
+        if(typeof Sfx!=="undefined") Sfx.play("heal");
+        BATTLE.fx.push({x:BATTLE._px,y:BATTLE._py,age:0,dur:0.4,r:14,color:"#71e88a"});
+      } else {
+        BATTLE.coins+=d.val;
+        if(typeof Sfx!=="undefined") Sfx.play("coin");
+      }
       BATTLE.drops.splice(i,1);
     } else if(d.age>25) BATTLE.drops.splice(i,1);
   }

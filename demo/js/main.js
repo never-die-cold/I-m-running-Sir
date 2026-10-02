@@ -178,9 +178,11 @@ function loop(nowMs){
       if(shiftNow&&!_prevShift) tryBattleDash();      /* 战斗模式：Shift=翻滚 */
       _prevShift=shiftNow;
       moving = dir.x!==0||dir.y!==0;
-      /* 战斗内不常驻冲刺（翻滚替代），体力仅跑步模式消耗 */
-      session.tick(dt, wallMs, dir, boot.targetSpeed*BATTLE.player.moveMul, false);
+      /* 战斗内不常驻冲刺（翻滚替代），体力仅跑步模式消耗；地形减速生效 */
+      const tm=terrainMulAt(session.worldPos);
+      session.tick(dt, wallMs, dir, boot.targetSpeed*BATTLE.player.moveMul*tm, false);
       battleTick(dt, session.worldPos, moving);
+      collideCampus(session.worldPos);
       if(BATTLE.state==="levelup" && _prevBState!=="levelup") Sfx.play("levelup");
       if(BATTLE.state==="dead" && _prevBState!=="dead") Sfx.play("death");
       if(BATTLE.state==="victory" && _prevBState!=="victory") Sfx.play("victory");
@@ -192,7 +194,8 @@ function loop(nowMs){
       moving = dir.x!==0||dir.y!==0;
       const sprint = !!(keys.ShiftLeft||keys.ShiftRight||keys.ShiftRightMobile);
       if(boot.autopilot) session.tickAutopilot(dt, wallMs, boot.targetSpeed);
-      else session.tick(dt, wallMs, dir, boot.targetSpeed, sprint);
+      else session.tick(dt, wallMs, dir, boot.targetSpeed*terrainMulAt(session.worldPos), sprint);
+      collideCampus(session.worldPos);                  /* 建筑实体碰撞（全模式） */
     }
     /* 升级选牌 / 倒下 / 结算：世界冻结，等待选择 */
 

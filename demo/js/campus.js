@@ -59,6 +59,39 @@ function _inAnyWater(x, y, water, pad){
   return false;
 }
 
+/* 地形减速：水面 ×0.6（湖/河），林 地 ×0.85（庄里山步道） */
+function terrainMulAt(p){
+  let m=1;
+  for (const w of (CAMPUS.water||[])){
+    if (w.c){
+      const nx=(p.x-w.c.x)/w.rx, ny=(p.y-w.c.y)/w.ry;
+      if (nx*nx+ny*ny<=1) return 0.6;
+    } else {
+      for (let i=0;i<w.pts.length-1;i++){
+        if (_distPointSeg(p, w.pts[i], w.pts[i+1]) < w.w/2) return 0.6;
+      }
+    }
+  }
+  for (const f of (CAMPUS.forests||[])){
+    const nx=(p.x-f.c.x)/f.rx, ny=(p.y-f.c.y)/f.ry;
+    if (nx*nx+ny*ny<=1) m=Math.min(m,0.85);
+  }
+  return m;
+}
+
+/* 建筑实体碰撞：把点推出建筑外沿（含 2m 墙距） */
+function collideCampus(p){
+  for (const b of CAMPUS.buildings){
+    const hx=b.s.x/2+2, hy=b.s.y/2+2;
+    const dx=p.x-b.c.x, dy=p.y-b.c.y;
+    if (Math.abs(dx)<hx && Math.abs(dy)<hy){
+      const px=hx-Math.abs(dx), py=hy-Math.abs(dy);
+      if (px<py) p.x=b.c.x+(dx>=0?hx:-hx);
+      else       p.y=b.c.y+(dy>=0?hy:-hy);
+    }
+  }
+}
+
 /* 解析并装配当前校园（Polyline / 边界 / 林木） */
 function initCampus(){
   let want=null;
