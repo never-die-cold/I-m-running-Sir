@@ -498,6 +498,22 @@ function drawJoystick(){
   ctx.restore();
 }
 
+function drawFireJoystick(){
+  const R=Math.min(W,H)*0.16;
+  const ox=fireJoy.active?fireJoy.ox:W*0.84, oy=fireJoy.active?fireJoy.oy:H*0.62;
+  ctx.save();
+  ctx.strokeStyle="rgba(63,214,255,.28)"; ctx.lineWidth=2;
+  ctx.beginPath(); ctx.arc(ox,oy,R,0,7); ctx.stroke();
+  ctx.strokeStyle="rgba(63,214,255,.14)";
+  ctx.beginPath(); ctx.arc(ox,oy,R*0.45,0,7); ctx.stroke();
+  const mag=Math.hypot(fireJoy.x,fireJoy.y);
+  ctx.fillStyle=fireJoy.active&&mag>0.05?"rgba(63,214,255,.8)":"rgba(255,255,255,.26)";
+  ctx.beginPath(); ctx.arc(ox+fireJoy.x*R, oy-fireJoy.y*R, R*0.28, 0, 7); ctx.fill();
+  ctx.fillStyle="rgba(255,255,255,.5)"; ctx.font="10px sans-serif"; ctx.textAlign="center";
+  ctx.fillText("射击", ox, oy);
+  ctx.restore();
+}
+
 /* ============================================================
    粒子（跑步尘土 / 彩带）与雨（屏幕空间）
    ============================================================ */

@@ -110,6 +110,38 @@
     touch-action:none; user-select:none; -webkit-user-select:none; }
   #mbtns button:active { background:#f9c63a; color:#10130f; }
   #mbtns button.on { background:#3fd6ff; color:#10130f; border-color:#3fd6ff; }
+  #mbtns button.cooldown { opacity:.45; }
+
+  /* ---- 移动端 / 小屏适配 ---- */
+  @media (max-width: 900px){
+    .panel { padding:6px 8px 8px; }
+    .panel h2 { font-size:9px; }
+    .row { font-size:11px; gap:10px; }
+    #pLeft { width:200px; }
+    #pRight { width:212px; }
+    #pTop { width:214px; }
+    #json { font-size:9.5px; max-height:56px; }
+    .overlay .cards { flex-direction:column; align-items:center; }
+    .overlay .skcard { width:220px; }
+    .overlay .card { min-width:260px; max-width:92vw; padding:12px; }
+    #startOverlay .card { padding:14px; }
+    .chip { padding:5px 10px; font-size:11px; }
+    #mbtns button { width:48px; height:48px; font-size:12px; }
+  }
+  @media (max-width: 700px), (max-height: 520px){
+    #pRight { display:none; }
+    #pLeft { width:178px; left:8px; top:8px; }
+    #pTop { top:8px; width:200px; }
+    #pBottom { bottom:8px; max-width:calc(100% - 16px); }
+    #hint { font-size:10px; }
+    .kbd { padding:1px 4px; font-size:9.5px; }
+    #speeds { right:8px; bottom:8px; padding:4px 6px; }
+    #speeds button { font-size:10px; padding:2px 6px; }
+    #mbtns { right:8px; bottom:56px; gap:8px; }
+    #mbtns button { width:56px; height:56px; font-size:12.5px; border-radius:28px; }
+    #toast { bottom:64px; }
+    .toastItem { font-size:11px; padding:6px 12px; }
+  }
 </style>
 </head>
 <body>
@@ -159,15 +191,16 @@
 <div class="panel" id="pBottom">
   <div id="hint">
     <b id="vMode">手动模式</b> ·
-    <span class="kbd">WASD</span> / 拖左半屏 移动 ·
-    <span class="kbd">空格</span> 自动驾驶 ·
+    <span class="kbd">WASD</span> 移动 ·
+    <span class="kbd">J</span>/<span class="kbd">左键</span> 射击 ·
+    <span class="kbd">K</span> 技能 ·
     <span class="kbd">Shift</span> 冲刺/翻滚 ·
+    <span class="kbd">空格</span> 自动驾驶 ·
     <span class="kbd">1-4</span> 模式(4=战斗) ·
     <span class="kbd">M</span> 静音 ·
     <span class="kbd">H</span> 面板 ·
     <span class="kbd">P</span> 暂停 ·
-    <span class="kbd">T</span> 结算 ·
-    <span class="kbd">滚轮</span> 缩放
+    <span class="kbd">T</span> 结算
   </div>
 </div>
 
@@ -242,7 +275,9 @@
 <div id="mbtns">
   <button id="mbPause" title="暂停 (P)">⏸</button>
   <button id="mbAuto" title="自动驾驶 (空格)">自动</button>
-  <button id="mbSprint" title="冲刺 (Shift)">冲刺</button>
+  <button id="mbFire" title="普攻：按住自动索敌连射">普攻</button>
+  <button id="mbSkill" title="环射 (K)">技能</button>
+  <button id="mbSprint" title="冲刺/翻滚 (Shift)">冲刺</button>
 </div>
 
 <script src="js/geo.js"></script>

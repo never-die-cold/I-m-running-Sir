@@ -3,9 +3,12 @@
    main.js —— 输入 / 会话 / 主循环
    ============================================================ */
 const keys={};
+const mouse={x:0,y:0,down:false};
+const fireJoy={active:false,id:null,ox:0,oy:0,x:0,y:0};
 window.addEventListener("keydown",e=>{
   keys[e.code]=true;
   Sfx.unlock();
+  if(e.code==="KeyK"){ battleNovaBurst(); return; }   // 主动技能「环射」
   /* 开始菜单：1-4 选模式，回车开始 */
   if(isStartVisible()){
     if(e.code==="Digit1"){ START_OPTS.mode="checkpoint"; buildStartPanel(); }
@@ -34,8 +37,6 @@ window.addEventListener("keydown",e=>{
   if(e.code==="Digit2"){ hideResult(); session.setMode("tour"); resetRun(); }
   if(e.code==="Digit3"){ hideResult(); session.setMode("free"); resetRun(); }
   if(e.code==="Digit4"){ hideResult(); session.setMode("battle"); resetRun(); }
-  if(e.code==="Equal"||e.code==="NumpadAdd"){ cam.zoom=Math.min(CAM_MAX,cam.zoom*1.18); }
-  if(e.code==="Minus"||e.code==="NumpadSubtract"){ cam.zoom=Math.max(CAM_MIN,cam.zoom/1.18); }
 });
 window.addEventListener("keyup",e=>{ keys[e.code]=false; });
 cv.addEventListener("wheel",e=>{
@@ -48,24 +49,51 @@ function canvasPos(e){
   const r=cv.getBoundingClientRect();
   return { x:e.clientX-r.left, y:e.clientY-r.top };
 }
+cv.addEventListener("wheel",e=>{ e.preventDefault(); },{passive:false});   /* 视角锁定：禁用缩放 */
+function canvasPos(e){
+  const r=cv.getBoundingClientRect();
+  return { x:e.clientX-r.left, y:e.clientY-r.top };
+}
 cv.addEventListener("pointerdown",e=>{
   Sfx.unlock();
-  if(e.clientX - cv.getBoundingClientRect().left > W*0.55) return;
-  joy.active=true; joy.id=e.pointerId;
-  const p=canvasPos(e); joy.ox=p.x; joy.oy=p.y;
-  cv.setPointerCapture(e.pointerId);
+  const pos=canvasPos(e);
+  if(e.pointerType==="mouse"){                      /* 桌面鼠标：按住左键朝光标射击 */
+    mouse.x=pos.x; mouse.y=pos.y; mouse.down=true;
+    return;
+  }
+  if(pos.x > W*0.5){                                /* 触屏右半屏：射击摇杆 */
+    fireJoy.active=true; fireJoy.id=e.pointerId;
+    fireJoy.ox=pos.x; fireJoy.oy=pos.y; fireJoy.x=0; fireJoy.y=0;
+    cv.setPointerCapture(e.pointerId);
+  } else {                                          /* 触屏左半屏：移动摇杆 */
+    joy.active=true; joy.id=e.pointerId;
+    joy.ox=pos.x; joy.oy=pos.y;
+    cv.setPointerCapture(e.pointerId);
+  }
 });
 cv.addEventListener("pointermove",e=>{
-  if(!joy.active||e.pointerId!==joy.id) return;
-  const p=canvasPos(e);
-  const R=Math.min(W,H)*0.13;
-  let dx=(p.x-joy.ox)/R, dy=-(p.y-joy.oy)/R;
-  const m=Math.hypot(dx,dy); if(m>1){ dx/=m; dy/=m; }
-  joy.x=dx; joy.y=dy;
+  const pos=canvasPos(e);
+  if(e.pointerType==="mouse"){ mouse.x=pos.x; mouse.y=pos.y; return; }
+  if(joy.active&&e.pointerId===joy.id){
+    const R=Math.min(W,H)*0.13;
+    let dx=(pos.x-joy.ox)/R, dy=-(pos.y-joy.oy)/R;
+    const m=Math.hypot(dx,dy); if(m>1){ dx/=m; dy/=m; }
+    joy.x=dx; joy.y=dy;
+  }
+  if(fireJoy.active&&e.pointerId===fireJoy.id){
+    const R=Math.min(W,H)*0.16;
+    let dx=(pos.x-fireJoy.ox)/R, dy=-(pos.y-fireJoy.oy)/R;
+    const m=Math.hypot(dx,dy); if(m>1){ dx/=m; dy/=m; }
+    fireJoy.x=dx; fireJoy.y=dy;
+  }
 });
-function endJoy(e){ if(e.pointerId===joy.id){ joy.active=false; joy.id=null; joy.x=0; joy.y=0; } }
-cv.addEventListener("pointerup",endJoy);
-cv.addEventListener("pointercancel",endJoy);
+function endPointer(e){
+  if(e.pointerType==="mouse"){ mouse.down=false; return; }
+  if(joy.active&&e.pointerId===joy.id){ joy.active=false; joy.id=null; joy.x=0; joy.y=0; }
+  if(fireJoy.active&&e.pointerId===fireJoy.id){ fireJoy.active=false; fireJoy.id=null; fireJoy.x=0; fireJoy.y=0; }
+}
+cv.addEventListener("pointerup",endPointer);
+cv.addEventListener("pointercancel",endPointer);
 
 function readInput(){
   let x=0,y=0;
@@ -89,13 +117,14 @@ let session, boot;
 function resetRun(){
   if (typeof Progress !== "undefined") Progress.finishRun(session, session.mode==="battle"?BATTLE:null);
   session.resetToRouteStart();
-  if(session.mode==="checkpoint"||session.mode==="battle")
+  if(session.mode==="checkpoint")
     session.spawnCheckpoints(boot.cpCount||3, 80, 120, 0.15);
+  else if(session.mode==="battle")
+    session.spawnCheckpoints((boot.cpCount||3)*2, 70, 100, 0.08);   /* 战斗：站点×2，间距 ~300-500m */
   else session.checkpoints=[];
   session.landmarksFound=[];
   session.stamina=100;
   if(session.mode==="battle") battleReset(20260924, session);
-  if(session.mode==="battle") cam.zoom=Math.min(cam.zoom,0.34);   /* 战斗视野拉远 */
   if(typeof Store!=="undefined") Store.write("devPanels", session.mode!=="battle"); /* 战斗默认收 GPS 面板 */
   session.startRun();
   boot.autopilot=false;
@@ -140,6 +169,11 @@ function init(){
     if(session.mode==="battle") tryBattleDash();       /* 战斗=翻滚 */
     else keys.ShiftRightMobile=true;
   });
+  const fb=$("mbFire");
+  fb.addEventListener("pointerdown",e=>{ e.preventDefault(); BATTLE.firing=true; });   // 普攻：按住自动索敌连射
+  const fup=()=>{ BATTLE.firing=false; };
+  fb.addEventListener("pointerup",fup); fb.addEventListener("pointercancel",fup); fb.addEventListener("pointerleave",fup);
+  $("mbSkill").addEventListener("click",()=>battleNovaBurst());
   const up=()=>{ keys.ShiftRightMobile=false; };
   sb.addEventListener("pointerup",up); sb.addEventListener("pointercancel",up); sb.addEventListener("pointerleave",up);
 
@@ -154,6 +188,22 @@ function tryBattleDash(){
   let dx=dir.x, dy=dir.y;
   if(dx===0&&dy===0){ dx=session.velocity.x; dy=session.velocity.y; }  // 无输入沿当前朝向
   battleDash(dx,dy);
+}
+
+function battleFireInput(){
+  /* 战斗射击输入：J/普攻键=自动索敌；鼠标=朝光标；射击摇杆=摇杆方向（轻拉自动索敌） */
+  if(keys.KeyJ) return { firing:true, aim:null };
+  if(mouse.down){
+    const wx=cam.x+(mouse.x-W/2)/cam.zoom, wy=cam.y-(mouse.y-H/2)/cam.zoom;
+    const dx=wx-session.worldPos.x, dy=wy-session.worldPos.y;
+    const l=Math.hypot(dx,dy);
+    return { firing:true, aim:l>1e-6?{x:dx/l,y:dy/l}:null };
+  }
+  if(fireJoy.active){
+    const m=Math.hypot(fireJoy.x,fireJoy.y);
+    return { firing:true, aim:m>0.25?{x:fireJoy.x/m,y:fireJoy.y/m}:null };  // 轻拉=自动索敌辅助
+  }
+  return { firing:false, aim:null };
 }
 
 let _dustT=0, _lastShootT=0, _prevBState="fighting", _prevBullets=0, _prevHp=100, _prevShift=false;
@@ -178,9 +228,10 @@ function loop(nowMs){
       if(shiftNow&&!_prevShift) tryBattleDash();      /* 战斗模式：Shift=翻滚 */
       _prevShift=shiftNow;
       moving = dir.x!==0||dir.y!==0;
-      /* 战斗内不常驻冲刺（翻滚替代），体力仅跑步模式消耗；地形减速生效 */
+      const fi=battleFireInput();                     /* 主动射击（摇杆/鼠标/J/普攻键） */
+      BATTLE.firing=fi.firing; BATTLE.aim=fi.aim;
       const tm=terrainMulAt(session.worldPos);
-      session.tick(dt, wallMs, dir, boot.targetSpeed*BATTLE.player.moveMul*tm, false);
+      session.tick(dt, wallMs, dir, boot.targetSpeed*BATTLE.player.moveMul*tm*1.15, false);
       battleTick(dt, session.worldPos, moving);
       collideCampus(session.worldPos);
       if(BATTLE.state==="levelup" && _prevBState!=="levelup") Sfx.play("levelup");
@@ -206,9 +257,12 @@ function loop(nowMs){
   const k=1-Math.exp(-realDt*6);
   cam.x += (session.worldPos.x-cam.x)*k;
   cam.y += (session.worldPos.y-cam.y)*k;
+  /* 视角锁定：战斗 0.55 / 跑步 0.42，禁用自由缩放 */
+  cam.zoom += ((battleMode?0.55:0.42)-cam.zoom)*Math.min(1,realDt*5);
 
   draw();
   drawJoystick();
+  drawFireJoystick();
   updateHud();
   requestAnimationFrame(loop);
 }

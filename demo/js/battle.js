@@ -18,6 +18,8 @@ const BATTLE = {
   hitStop: 0,       // 顿帧计时（>0 时冻结战斗世界）
   dashT: 0, dashVx: 0, dashVy: 0,   // 翻滚：0.22s 锁向位移
   invuln: 0, dashCd: 0,             // 翻滚无敌帧 / 冷却
+  firing: false, aim: null,         // 主动射击：按住普攻/射击摇杆（aim={x,y} 为手动方向，null=自动索敌）
+  novaCdS: 0,                       // 主动技能「环射」冷却
   wave: 0,          // 当前站点编号（1 起），0=赶路中
   roomsTotal: 0,    // 站点总数
   room: null,       // 当前驻守的打卡点（清空前不再触发新房间）
@@ -30,14 +32,15 @@ const BATTLE = {
 };
 
 const ENEMY_TYPES = {
-  chaser:  { hp:22,  speed:2.7, r:6,  dmg:10, exp:3,  color:"#ff6b5a" },
-  shooter: { hp:16,  speed:2.0, r:6,  dmg:8,  exp:4,  color:"#ffb84d", fireInterval:2.6, bulletSpeed:9.5 },
-  charger: { hp:34,  speed:2.4, r:7,  dmg:14, exp:6,  color:"#e858c8", dashCd:3.4, dashSpeed:13 },
-  boss:    { hp:220, speed:2.6, r:12, dmg:20, exp:40, color:"#ff3b30", fireInterval:1.7, bulletSpeed:8.5 },
-  wild:    { hp:8,   speed:2.0, r:5,  dmg:6,  exp:2,  color:"#9ad14b" }
+  chaser:  { hp:22,  speed:2.9, r:6,  dmg:10, exp:3,  color:"#ff6b5a" },
+  shooter: { hp:16,  speed:2.3, r:6,  dmg:8,  exp:4,  color:"#ffb84d", fireInterval:2.4, bulletSpeed:10 },
+  charger: { hp:34,  speed:2.7, r:7,  dmg:14, exp:6,  color:"#e858c8", dashCd:3.0, dashSpeed:13 },
+  boss:    { hp:220, speed:2.8, r:12, dmg:20, exp:40, color:"#ff3b30", fireInterval:1.6, bulletSpeed:9 },
+  wild:    { hp:8,   speed:2.2, r:5,  dmg:6,  exp:2,  color:"#9ad14b" }
 };
 
 const BULLET_SPEED = 26;
+const BATTLE_ATK_INTERVAL = 0.45;   // 元气骑士式高攻速
 
 const SKILLS = [
   { id:"multi",    n:"多重射击", d:"同时射出的箭 +1",        ok:p=>p.arrows<6,        ap:(p,m)=>{p.arrows+=Math.max(1,Math.round(m));} },
@@ -77,6 +80,7 @@ function battleReset(seed, session){
   BATTLE.dmgTexts=[]; BATTLE.drops=[];
   BATTLE.shake=0; BATTLE.hitStop=0; BATTLE.coins=0;
   BATTLE.dashT=0; BATTLE.dashVx=0; BATTLE.dashVy=0; BATTLE.invuln=0; BATTLE.dashCd=0;
+  BATTLE.novaCdS=0;
   BATTLE.wave=0; BATTLE.roomsTotal=0; BATTLE.room=null;
   BATTLE.kills=0; BATTLE.exp=0; BATTLE.level=1; BATTLE.expNext=10;
   BATTLE.state="fighting"; BATTLE.choices=[];
@@ -98,7 +102,7 @@ function battleApplyMeta(){
   p.atk=10*(1+0.08*(m.atk||0));
   p.maxHp=100+12*(m.hp||0); p.hp=p.maxHp;
   p.moveMul=1+0.05*(m.spd||0);
-  p.atkInterval=0.55/(1+0.07*(m.aspd||0));
+  p.atkInterval=BATTLE_ATK_INTERVAL/(1+0.07*(m.aspd||0));
   BATTLE.revives=m.revive||0;
 }
 
@@ -120,7 +124,7 @@ function battleSpawnSupplies(session){
 function battleSpawnRoamers(session){
   const route=session.mainRoute||session.route;
   const L=route.length;
-  const n=2+Math.floor(BATTLE._rng2.next()*2);
+  const n=4+Math.floor(BATTLE._rng2.next()*3);   // 4~6 只
   for(let i=0;i<n;i++){
     const p=route.pointAt(BATTLE._rng2.range(L*0.05,L*0.95));
     p.x+=(BATTLE._rng2.next()-0.5)*40; p.y+=(BATTLE._rng2.next()-0.5)*40;
@@ -142,7 +146,7 @@ function battleSpawnRoom(cp){
   };
   const ringPos=()=>{
     const a=BATTLE.rng.next()*Math.PI*2;
-    const d=18+BATTLE.rng.next()*26;
+    const d=12+BATTLE.rng.next()*18;            /* 贴身刷怪，进站即战 */
     return clamp({x:cx+Math.cos(a)*d, y:cy+Math.sin(a)*d});
   };
   const push=(type)=>{
@@ -157,9 +161,9 @@ function battleSpawnRoom(cp){
       hitCd:0, flash:0, tele:0, elite, sign:BATTLE.rng.next()<0.5?-1:1 });
   };
   const i=cp.index, isBossRoom=(i===BATTLE.roomsTotal-1);
-  if(isBossRoom){ push("boss"); push("chaser"); push("chaser"); push("shooter"); }
+  if(isBossRoom){ push("boss"); push("chaser"); push("chaser"); push("shooter"); push("charger"); }
   else {
-    const ch=2+Math.ceil((i+1)/2), sh=i>=1?Math.floor((i+1)/2):0, cg=i>=2?1+(i>=4?1:0):0;
+    const ch=3+Math.ceil((i+1)*0.8), sh=i>=1?1+Math.floor((i+1)/3):0, cg=i>=2?1+(i>=4?1:0):0;
     for(let k=0;k<ch;k++) push("chaser");
     for(let k=0;k<sh;k++) push("shooter");
     for(let k=0;k<cg;k++) push("charger");
@@ -275,6 +279,23 @@ function battleDash(dx, dy){
   if(typeof Sfx!=="undefined") Sfx.play("dash");
 }
 
+/* 主动技能「环射」：环形爆发，冷却随环射等级缩短 */
+function battleNovaBurst(){
+  if(BATTLE.state!=="fighting") return;
+  if((BATTLE.novaCdS||0)>0) return;
+  const p=BATTLE.player;
+  const N=8+p.nova*4;
+  for(let i=0;i<N;i++){
+    const a=i/N*Math.PI*2+BATTLE.time*0.3;
+    BATTLE.bullets.push({x:BATTLE._px,y:BATTLE._py,vx:Math.cos(a)*BULLET_SPEED*0.85,
+      vy:Math.sin(a)*BULLET_SPEED*0.85,pierce:p.pierce,rico:p.ricochet,hits:[],life:1.8});
+  }
+  BATTLE.novaCdS=Math.max(3,6-(p.nova-1));
+  BATTLE.fx.push({x:BATTLE._px,y:BATTLE._py,age:0,dur:0.5,r:40,color:"#3fd6ff"});
+  BATTLE.shake=Math.min(1,(BATTLE.shake||0)+0.12);
+  if(typeof Sfx!=="undefined") Sfx.play("nova");
+}
+
 /* 特效/伤害数字老化 */
 function battleAgeFx(dt){
   for(let i=BATTLE.fx.length-1;i>=0;i--){
@@ -325,30 +346,23 @@ function battleTick(dt, playerPos, moving){
     }
   }
 
-  /* 停下自动索敌 */
+  /* 主动射击（元气骑士式）：普攻按住/射击摇杆，移动中可射 */
   BATTLE.fireCd-=dt;
-  if(!moving && BATTLE.fireCd<=0){
-    let best=null, bd=p.range;
-    for(const e of BATTLE.enemies){
-      const d=V.dist(playerPos,e);
-      if(d<bd){ bd=d; best=e; }
-    }
-    if(best) battleFireAt(best);
-  }
-
-  /* 环射 */
-  if(p.nova>0){
-    BATTLE.novaCd-=dt;
-    if(BATTLE.novaCd<=0){
-      BATTLE.novaCd=4;
-      const N=8+p.nova*4;
-      for(let i=0;i<N;i++){
-        const a=i/N*Math.PI*2;
-        BATTLE.bullets.push({x:BATTLE._px,y:BATTLE._py,vx:Math.cos(a)*BULLET_SPEED*0.8,
-          vy:Math.sin(a)*BULLET_SPEED*0.8,pierce:p.pierce,rico:0,hits:[],life:1.6});
+  if(BATTLE.firing && BATTLE.fireCd<=0){
+    let target=null;
+    if(BATTLE.aim && (BATTLE.aim.x||BATTLE.aim.y)){
+      target={x:BATTLE._px+BATTLE.aim.x*20, y:BATTLE._py+BATTLE.aim.y*20};   // 手动方向
+    } else {
+      let bd=p.range;
+      for(const e of BATTLE.enemies){
+        const d=V.dist(playerPos,e);
+        if(d<bd){ bd=d; target=e; }
       }
     }
+    if(target) battleFireAt(target);
   }
+
+  /* 主动技能「环射」由 battleNovaBurst() 触发，这里只走冷却 */
 
   /* 护盾回充 */
   if(p.shieldLv>0 && (p.shield||0)===0){

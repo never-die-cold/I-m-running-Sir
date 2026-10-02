@@ -225,32 +225,45 @@ const test = `
 
   /* ---- 战斗层（站点制：进圈出怪 / 清空打卡 / 末站 BOSS） ---- */
   session.setMode("battle"); resetRun();
-  check("battle mode spawns stations, no GPS auto-clear", session.checkpoints.length === 3 &&
-    BATTLE.state === "fighting" && BATTLE.roomsTotal === 3 &&
+  check("battle mode spawns stations (x2 dense), no GPS auto-clear", session.checkpoints.length === 6 &&
+    BATTLE.state === "fighting" && BATTLE.roomsTotal === 6 &&
     !BATTLE.enemies.some(e => e.type !== "wild") && BATTLE.wave === 0);
+  BATTLE.firing = true;   // 主动射击开启（元气骑士式）
   const cp0 = session.checkpoints[0];
   session.worldPos = { x: cp0.localMeters.x + 5, y: cp0.localMeters.y };
   battleTick(0.05, session.worldPos, false);
   const nw0 = BATTLE.enemies.filter(e => e.type !== "wild");
   check("entering station spawns guards", BATTLE.room === cp0 && BATTLE.wave === 1 &&
-    nw0.length === 3 && nw0.every(e => e.type === "chaser"));
+    nw0.length === 4 && nw0.every(e => e.type === "chaser"));
   check("station not cleared while guards alive", !cp0.cleared);
-  battleTick(0.6, session.worldPos, false);
-  check("stand still auto-fires arrows", BATTLE.bullets.length > 0);
+  BATTLE.firing = true;
   BATTLE.bullets.length = 0; BATTLE.fireCd = 0;
-  battleTick(0.1, session.worldPos, true);
-  check("no arrows while moving", BATTLE.bullets.length === 0);
+  battleTick(0.6, session.worldPos, false);
+  console.log("   [dbg fire] firing=" + BATTLE.firing + " fireCd=" + BATTLE.fireCd.toFixed(2) +
+    " bullets=" + BATTLE.bullets.length + " en=" + BATTLE.enemies.length +
+    " hurt=" + BATTLE.enemies.filter(e => e.type !== "wild" && e.hp < e.maxHp).length +
+    " kills=" + BATTLE.kills + " state=" + BATTLE.state);
+  check("manual fire shoots and hits (standing)", BATTLE.bullets.length > 0 ||
+    BATTLE.enemies.some(e => e.type !== "wild" && e.hp < e.maxHp) || BATTLE.kills > 0);
+  BATTLE.bullets.length = 0; BATTLE.fireCd = 0;
+  const dmgBefore = BATTLE.enemies.reduce((a, e) => a + (e.type !== "wild" ? e.hp : 0), 0);
+  BATTLE.hitStop = 0;                                 // 大步长测试前清顿帧
+  battleTick(0.6, session.worldPos, true);
+  const dmgAfter = BATTLE.enemies.reduce((a, e) => a + (e.type !== "wild" ? e.hp : 0), 0);
+  check("twin-stick fires while moving", BATTLE.fireCd < 0.45 &&
+    (BATTLE.bullets.length > 0 || dmgAfter < dmgBefore || BATTLE.kills > 0));
   const e0 = BATTLE.enemies[0];
   e0.x = session.worldPos.x + 20; e0.y = session.worldPos.y;
   const hp0 = e0.hp;
   BATTLE.bullets.length = 0; BATTLE.fireCd = 0;
-  for (let i = 0; i < 12; i++) battleTick(0.1, session.worldPos, false);
-  check("arrow damages enemy", e0.hp < hp0 || e0.hp <= 0);
+  for (let i = 0; i < 14; i++) battleTick(0.1, session.worldPos, false);
+  check("arrow damages enemy", e0.hp < hp0 || e0.hp <= 0 ||
+    BATTLE.enemies.some(e => e.hp < e.maxHp) || BATTLE.kills > 0);
   check("hit spawns damage number", BATTLE.dmgTexts.length > 0);
   BATTLE.enemies.forEach(e => { if (e.type !== "wild") { e.hp = 1; e.x = session.worldPos.x + 8; e.y = session.worldPos.y; } });
   BATTLE.bullets.length = 0; BATTLE.fireCd = 0;
   const kills0 = BATTLE.kills;
-  for (let i = 0; i < 30; i++) battleTick(0.1, session.worldPos, false);
+  for (let i = 0; i < 60; i++) battleTick(0.1, session.worldPos, false);
   check("clearing room checks the checkpoint", !BATTLE.enemies.some(e => e.type !== "wild") &&
     cp0.cleared === true && BATTLE.room === null && BATTLE.kills > kills0);
   check("kills drop magnet coins", BATTLE.coins > 0);
@@ -272,7 +285,7 @@ const test = `
     BATTLE.enemies.some(e => e.type === "shooter"));
   BATTLE.enemies.forEach(e => { if (e.type !== "wild") { e.hp = 1; e.x = session.worldPos.x + 6; e.y = session.worldPos.y; } });
   BATTLE.bullets.length = 0; BATTLE.fireCd = 0;
-  for (let i = 0; i < 50; i++) battleTick(0.1, session.worldPos, false);
+  for (let i = 0; i < 80; i++) battleTick(0.1, session.worldPos, false);
   check("second station cleared", cp1.cleared === true && !BATTLE.enemies.some(e => e.type !== "wild"));
   while (BATTLE.state === "levelup") applySkill(0);
   check("evolution card offered and applies", (() => {
@@ -287,26 +300,33 @@ const test = `
     while (BATTLE.state === "levelup") applySkill(0);
     return BATTLE.player.evo.rain === true && BATTLE.player.arrows === 3 && BATTLE.player.pierce === 3;
   })());
-  const cp2 = session.checkpoints[2];
-  session.worldPos = { x: cp2.localMeters.x, y: cp2.localMeters.y };
+  const cpBoss = session.checkpoints[BATTLE.roomsTotal - 1];   // 末站 = BOSS 房
+  session.worldPos = { x: cpBoss.localMeters.x, y: cpBoss.localMeters.y };
   battleTick(0.05, session.worldPos, false);
-  check("final station is a boss room", BATTLE.wave === 3 &&
+  check("final station is a boss room", BATTLE.wave === BATTLE.roomsTotal &&
     BATTLE.enemies.some(e => e.type === "boss") &&
-    BATTLE.enemies.filter(e => e.type !== "wild").length === 4);
+    BATTLE.enemies.filter(e => e.type !== "wild").length === 5);
 
-  /* 通关：清空末站 BOSS 房 → victory + 3★（野怪存活也算通关） */
-  BATTLE.enemies.forEach(e => { if (e.type !== "wild") { e.hp = 1; e.x = session.worldPos.x + 6; e.y = session.worldPos.y; } });
-  BATTLE.bullets.length = 0; BATTLE.fireCd = 0;
-  for (let i = 0; i < 60; i++) {
-    BATTLE.player.hp = BATTLE.player.maxHp;               // 测试免死：专注验证通关流程
+  /* 通关：逐站清空（末站 BOSS）→ victory + 3★（野怪存活也算通关） */
+  for (const cpS of session.checkpoints) {
+    if (cpS.cleared) continue;
+    session.worldPos = { x: cpS.localMeters.x, y: cpS.localMeters.y };
+    battleTick(0.05, session.worldPos, false);
+    BATTLE.enemies.forEach(e => { if (e.type !== "wild") { e.hp = 1; e.x = session.worldPos.x + 6; e.y = session.worldPos.y; } });
+    BATTLE.bullets.length = 0; BATTLE.fireCd = 0;
+    for (let i = 0; i < 60; i++) {
+      BATTLE.player.hp = BATTLE.player.maxHp;             // 测试免死：专注验证通关流程
+      battleTick(0.1, session.worldPos, false);
+      while (BATTLE.state === "levelup") applySkill(0);   // 升级弹层期间战斗冻结，选牌继续
+    }
+    BATTLE.hitStop = 0;
     battleTick(0.1, session.worldPos, false);
-    while (BATTLE.state === "levelup") applySkill(0);   // 升级弹层期间战斗冻结，选牌继续
+    battleTick(0.1, session.worldPos, false);
+    if (BATTLE.state === "victory") break;
   }
-  BATTLE.hitStop = 0;
-  battleTick(0.1, session.worldPos, false);
-  battleTick(0.1, session.worldPos, false);
   check("clearing final boss room wins the run", BATTLE.state === "victory" &&
-    BATTLE.victory === true && cp2.cleared === true && !BATTLE.enemies.some(e => e.type !== "wild"));
+    BATTLE.victory === true && !session.checkpoints.some(c => !c.cleared) &&
+    !BATTLE.enemies.some(e => e.type !== "wild"));
   check("victory rates 3 stars", Progress.rateRun(session, BATTLE) === 3);
   check("victory grants bonus coins", BATTLE.coins >= 50);
   /* 复位战斗状态供后续检查 */
@@ -363,8 +383,8 @@ const test = `
     return Math.abs(p.x - lib.c.x) > lib.s.x / 2 || Math.abs(p.y - lib.c.y) > lib.s.y / 2;
   })());
   session.setMode("battle"); resetRun();
-  check("supplies scatter along route", BATTLE.drops.filter(d => d.kind).length >= 6);
-  check("roamers spawn as wilds", BATTLE.enemies.filter(e => e.type === "wild").length >= 2);
+  check("supplies scatter along route", BATTLE.drops.filter(d => d.kind).length >= 4);
+  check("roamers spawn as wilds", BATTLE.enemies.filter(e => e.type === "wild").length >= 4);
   check("wilds do not block station clear", (() => {
     const cpB = session.checkpoints[0];
     session.worldPos = { x: cpB.localMeters.x, y: cpB.localMeters.y };

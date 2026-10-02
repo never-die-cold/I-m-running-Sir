@@ -300,6 +300,12 @@ function updateHud(){
   /* ---- 战斗层 HUD（弓箭手大作战式） ---- */
   const bt=BATTLE;
   const inBattle=s.mode==="battle";
+  /* 右侧功能键随模式切换：战斗=普攻/技能/冲刺，跑步=自动/冲刺 */
+  $("mbFire").style.display=inBattle?"":"none";
+  $("mbSkill").style.display=inBattle?"":"none";
+  $("mbAuto").style.display=inBattle?"none":"";
+  $("mbSkill").textContent=(bt.novaCdS||0)>0?Math.ceil(bt.novaCdS)+"s":"技能";
+  $("mbSkill").classList.toggle("cooldown",(bt.novaCdS||0)>0);
   /* GPS/JSON 开发面板：战斗模式默认收起，H 切换 */
   $("pRight").style.display=devPanelsVisible()?"":"none";
   $("pRight").style.opacity=inBattle?"0.85":"1";
