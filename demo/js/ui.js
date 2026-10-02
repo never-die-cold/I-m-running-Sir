@@ -84,10 +84,12 @@ function refreshBattleOverlays(){
     if(box.dataset.for!==String(BATTLE.level)){
       box.dataset.for=String(BATTLE.level);
       box.innerHTML="";
-      BATTLE.choices.forEach((sk,i)=>{
+      const RAR={common:["普通","#cfd8d5",""],rare:["稀有","#3fd6ff","skcard-rare"],epic:["史诗","#c9b3e6","skcard-epic"]};
+      BATTLE.choices.forEach((c,i)=>{
+        const r=RAR[c.rar]||RAR.common;
         const d=document.createElement("div");
-        d.className="skcard";
-        d.innerHTML="<b>"+(i+1)+". "+sk.n+"</b>"+sk.d+"<i>"+_skillLvTag(sk.id)+"</i>";
+        d.className="skcard "+r[2];
+        d.innerHTML="<b style='color:"+r[1]+"'>"+(i+1)+". "+c.s.n+" · "+r[0]+"</b>"+c.s.d+"<i>"+_skillLvTag(c.s.id)+"</i>";
         d.addEventListener("click",()=>applySkill(i));
         box.appendChild(d);
       });
@@ -104,7 +106,10 @@ function refreshBattleOverlays(){
 }
 function _skillLvTag(id){
   const p=BATTLE.player;
-  const cur={multi:p.arrows,pierce:p.pierce,ricochet:p.ricochet,nova:p.nova}[id];
+  const cur={multi:p.arrows,pierce:p.pierce,ricochet:p.ricochet,nova:p.nova,
+             side:p.side,leech:p.leech,magnet:p.magnet,shieldLv:p.shieldLv}[id];
+  if(id==="burn") return p.burn?"已习得":"";
+  if(id==="frost") return p.frost?"已习得":"";
   return cur!==undefined?("当前 "+cur+" 级"):"";
 }
 

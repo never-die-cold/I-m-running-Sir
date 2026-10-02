@@ -281,7 +281,7 @@ const test = `
     BATTLE.exp = BATTLE.expNext;
     battleTick(0.05, session.worldPos, false);
     if (BATTLE.state !== "levelup") return false;
-    const idx = BATTLE.choices.findIndex(c => c.id === "evoRain");
+    const idx = BATTLE.choices.findIndex(c => c.s && c.s.id === "evoRain");
     if (idx < 0) return false;
     applySkill(idx);
     while (BATTLE.state === "levelup") applySkill(0);
@@ -384,6 +384,54 @@ const test = `
     const hp0 = BATTLE.player.hp;
     battleTick(0.05, session.worldPos, false);
     return BATTLE.player.hp >= hp0 + 10;
+  })());
+
+  /* ---- Batch D：稀有度与新技能 ---- */
+  check("choices carry rarity and multiplier", (() => {
+    BATTLE.hitStop = 0; BATTLE.exp = BATTLE.expNext;
+    battleTick(0.05, session.worldPos, false);
+    while (BATTLE.state === "levelup") applySkill(0);
+    BATTLE.hitStop = 0; BATTLE.exp = BATTLE.expNext;
+    battleTick(0.05, session.worldPos, false);
+    const ok = BATTLE.choices.every(c => c.s && c.rar && c.m >= 1) &&
+      BATTLE.choices.some(c => c.rar === "common") || BATTLE.choices.some(c => c.rar === "rare") ||
+      BATTLE.choices.some(c => c.rar === "epic");
+    while (BATTLE.state === "levelup") applySkill(0);
+    return ok;
+  })());
+  check("epic multiplier scales skill power", (() => {
+    const s = SKILLS.find(x => x.id === "atk");
+    BATTLE.player.atk = 10; s.ap(BATTLE.player, 2);
+    const epic = BATTLE.player.atk === 16;
+    BATTLE.player.atk = 10; s.ap(BATTLE.player, 1);
+    const normal = BATTLE.player.atk === 13;
+    BATTLE.player.atk = 10;
+    return epic && normal;
+  })());
+  check("burn applies damage over time", (() => {
+    BATTLE.enemies = [{ id: 9006, type: "chaser", x: BATTLE._px + 40, y: BATTLE._py, hp: 50, maxHp: 50,
+      fireT: 0, dashT: 0, dashVx: 0, dashVy: 0, dashLeft: 0, hitCd: 0, flash: 0, tele: 0, elite: false, sign: 1 }];
+    BATTLE.player.burn = true; BATTLE.player.burnDps = 3;
+    BATTLE.enemies[0].burnT = 3; BATTLE.enemies[0].burnDps = 3;
+    BATTLE.bullets = []; BATTLE.fireCd = 99;   // 关闭射击，纯测燃烧
+    const h0 = BATTLE.enemies[0].hp;
+    for (let i = 0; i < 20; i++) battleTick(0.1, session.worldPos, true);  // 移动中也不影响燃烧
+    const dmg = h0 - (BATTLE.enemies[0] ? BATTLE.enemies[0].hp : 0);
+    BATTLE.player.burn = false;
+    return dmg >= 5;
+  })());
+  check("shield blocks one hit", (() => {
+    BATTLE.enemies = [{ id: 9007, type: "chaser", x: BATTLE._px, y: BATTLE._py, hp: 999, maxHp: 999,
+      fireT: 0, dashT: 0, dashVx: 0, dashVy: 0, dashLeft: 0, hitCd: 0, flash: 0, tele: 0, elite: false, sign: 1 }];
+    BATTLE.player.shieldLv = 1; BATTLE.player.shield = 1; BATTLE.player.shieldCd = 0;
+    BATTLE.player.hp = 100;
+    battleTick(0.1, session.worldPos, false);
+    const blocked = BATTLE.player.hp === 100 && BATTLE.player.shield === 0;
+    BATTLE.hitStop = 0; BATTLE.enemies[0].hitCd = 0;
+    battleTick(0.1, session.worldPos, false);
+    const hurt = BATTLE.player.hp < 100;
+    BATTLE.player.shieldLv = 0;
+    return blocked && hurt;
   })());
 
   /* ---- Batch C：设置项（音量/震屏/伤害数字） ---- */
