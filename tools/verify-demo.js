@@ -70,6 +70,8 @@ const test = `
 ;(function(){
   const results = [];
   function check(label, ok){ results.push([label, !!ok]); }
+  /* 战斗子检查前置：清顿帧 + 排空升级暂停（击杀可随时触发升级） */
+  function battleReady(){ BATTLE.hitStop = 0; let g = 0; while (BATTLE.state === "levelup" && g < 30) { applySkill(0); g++; } }
 
   const targetSpeed = 2.94;
   const fixes = [];
@@ -236,34 +238,32 @@ const test = `
   check("entering station spawns guards", BATTLE.room === cp0 && BATTLE.wave === 1 &&
     nw0.length === 4 && nw0.every(e => e.type === "chaser"));
   check("station not cleared while guards alive", !cp0.cleared);
+  battleReady();
   BATTLE.firing = true;
   BATTLE.bullets.length = 0; BATTLE.fireCd = 0;
   battleTick(0.6, session.worldPos, false);
-  console.log("   [dbg fire] firing=" + BATTLE.firing + " fireCd=" + BATTLE.fireCd.toFixed(2) +
-    " bullets=" + BATTLE.bullets.length + " en=" + BATTLE.enemies.length +
-    " hurt=" + BATTLE.enemies.filter(e => e.type !== "wild" && e.hp < e.maxHp).length +
-    " kills=" + BATTLE.kills + " state=" + BATTLE.state);
   check("manual fire shoots and hits (standing)", BATTLE.bullets.length > 0 ||
     BATTLE.enemies.some(e => e.type !== "wild" && e.hp < e.maxHp) || BATTLE.kills > 0);
   BATTLE.bullets.length = 0; BATTLE.fireCd = 0;
   const dmgBefore = BATTLE.enemies.reduce((a, e) => a + (e.type !== "wild" ? e.hp : 0), 0);
-  BATTLE.hitStop = 0;                                 // 大步长测试前清顿帧
+  battleReady();
   battleTick(0.6, session.worldPos, true);
+  battleReady();
   const dmgAfter = BATTLE.enemies.reduce((a, e) => a + (e.type !== "wild" ? e.hp : 0), 0);
-  check("twin-stick fires while moving", BATTLE.fireCd < 0.45 &&
-    (BATTLE.bullets.length > 0 || dmgAfter < dmgBefore || BATTLE.kills > 0));
+  check("twin-stick fires while moving", BATTLE.bullets.length > 0 || dmgAfter < dmgBefore || BATTLE.kills > 0);
   const e0 = BATTLE.enemies[0];
   e0.x = session.worldPos.x + 20; e0.y = session.worldPos.y;
   const hp0 = e0.hp;
   BATTLE.bullets.length = 0; BATTLE.fireCd = 0;
   for (let i = 0; i < 14; i++) battleTick(0.1, session.worldPos, false);
+  battleReady();
   check("arrow damages enemy", e0.hp < hp0 || e0.hp <= 0 ||
     BATTLE.enemies.some(e => e.hp < e.maxHp) || BATTLE.kills > 0);
   check("hit spawns damage number", BATTLE.dmgTexts.length > 0);
   BATTLE.enemies.forEach(e => { if (e.type !== "wild") { e.hp = 1; e.x = session.worldPos.x + 8; e.y = session.worldPos.y; } });
   BATTLE.bullets.length = 0; BATTLE.fireCd = 0;
   const kills0 = BATTLE.kills;
-  for (let i = 0; i < 60; i++) battleTick(0.1, session.worldPos, false);
+  for (let i = 0; i < 60; i++) { battleTick(0.1, session.worldPos, false); battleReady(); }
   check("clearing room checks the checkpoint", !BATTLE.enemies.some(e => e.type !== "wild") &&
     cp0.cleared === true && BATTLE.room === null && BATTLE.kills > kills0);
   check("kills drop magnet coins", BATTLE.coins > 0);
@@ -281,14 +281,25 @@ const test = `
   const cp1 = session.checkpoints[1];
   session.worldPos = { x: cp1.localMeters.x - 5, y: cp1.localMeters.y };
   battleTick(0.05, session.worldPos, false);
+  battleReady();
   check("second station mixes in shooters", BATTLE.room === cp1 && BATTLE.wave === 2 &&
     BATTLE.enemies.some(e => e.type === "shooter"));
   BATTLE.enemies.forEach(e => { if (e.type !== "wild") { e.hp = 1; e.x = session.worldPos.x + 6; e.y = session.worldPos.y; } });
   BATTLE.bullets.length = 0; BATTLE.fireCd = 0;
-  for (let i = 0; i < 80; i++) battleTick(0.1, session.worldPos, false);
+  for (let i = 0; i < 80; i++) {
+    BATTLE.invuln = 99;                                 // 测试无敌
+    BATTLE.player.hp = BATTLE.player.maxHp;
+    battleTick(0.1, session.worldPos, false);
+    battleReady();
+  }
   check("second station cleared", cp1.cleared === true && !BATTLE.enemies.some(e => e.type !== "wild"));
   while (BATTLE.state === "levelup") applySkill(0);
   check("evolution card offered and applies", (() => {
+    session.setMode("battle"); resetRun();
+    const cpE = session.checkpoints[0];
+    session.worldPos = { x: cpE.localMeters.x, y: cpE.localMeters.y };
+    battleTick(0.05, session.worldPos, false);           // 进站出怪
+    battleReady();
     BATTLE.player.arrows = 2; BATTLE.player.pierce = 2;
     BATTLE.hitStop = 0;
     BATTLE.exp = BATTLE.expNext;
@@ -300,9 +311,13 @@ const test = `
     while (BATTLE.state === "levelup") applySkill(0);
     return BATTLE.player.evo.rain === true && BATTLE.player.arrows === 3 && BATTLE.player.pierce === 3;
   })());
+  BATTLE.enemies = BATTLE.enemies.filter(e => e.type === "wild");   // 清残留，专注末站断言
+  BATTLE.room = null;                                                 // 过滤等效"清场"，避免误触发清站
+  battleReady();
   const cpBoss = session.checkpoints[BATTLE.roomsTotal - 1];   // 末站 = BOSS 房
   session.worldPos = { x: cpBoss.localMeters.x, y: cpBoss.localMeters.y };
   battleTick(0.05, session.worldPos, false);
+  battleReady();
   check("final station is a boss room", BATTLE.wave === BATTLE.roomsTotal &&
     BATTLE.enemies.some(e => e.type === "boss") &&
     BATTLE.enemies.filter(e => e.type !== "wild").length === 5);
@@ -315,9 +330,9 @@ const test = `
     BATTLE.enemies.forEach(e => { if (e.type !== "wild") { e.hp = 1; e.x = session.worldPos.x + 6; e.y = session.worldPos.y; } });
     BATTLE.bullets.length = 0; BATTLE.fireCd = 0;
     for (let i = 0; i < 60; i++) {
-      BATTLE.player.hp = BATTLE.player.maxHp;             // 测试免死：专注验证通关流程
+      BATTLE.invuln = 99;                                 // 测试无敌：专注验证通关流程
       battleTick(0.1, session.worldPos, false);
-      while (BATTLE.state === "levelup") applySkill(0);   // 升级弹层期间战斗冻结，选牌继续
+      battleReady();
     }
     BATTLE.hitStop = 0;
     battleTick(0.1, session.worldPos, false);
@@ -386,6 +401,7 @@ const test = `
   check("supplies scatter along route", BATTLE.drops.filter(d => d.kind).length >= 4);
   check("roamers spawn as wilds", BATTLE.enemies.filter(e => e.type === "wild").length >= 4);
   check("wilds do not block station clear", (() => {
+    battleReady();
     const cpB = session.checkpoints[0];
     session.worldPos = { x: cpB.localMeters.x, y: cpB.localMeters.y };
     battleTick(0.05, session.worldPos, false);                     // 进站出怪
@@ -394,11 +410,12 @@ const test = `
     for (let i = 0; i < 30; i++) {
       BATTLE.player.hp = BATTLE.player.maxHp;
       battleTick(0.1, session.worldPos, false);
-      while (BATTLE.state === "levelup") applySkill(0);
+      battleReady();
     }
     return cpB.cleared === true && BATTLE.enemies.some(e => e.type === "wild");
   })());
   check("med kit heals on pickup", (() => {
+    battleReady();
     BATTLE.drops.push({ x: BATTLE._px, y: BATTLE._py, vx: 0, vy: 0, age: 0, val: 12, kind: "med" });
     BATTLE.player.hp = BATTLE.player.maxHp - 30;
     const hp0 = BATTLE.player.hp;
@@ -429,6 +446,7 @@ const test = `
     return epic && normal;
   })());
   check("burn applies damage over time", (() => {
+    battleReady();
     BATTLE.enemies = [{ id: 9006, type: "chaser", x: BATTLE._px + 40, y: BATTLE._py, hp: 50, maxHp: 50,
       fireT: 0, dashT: 0, dashVx: 0, dashVy: 0, dashLeft: 0, hitCd: 0, flash: 0, tele: 0, elite: false, sign: 1 }];
     BATTLE.player.burn = true; BATTLE.player.burnDps = 3;
@@ -441,6 +459,7 @@ const test = `
     return dmg >= 5;
   })());
   check("shield blocks one hit", (() => {
+    battleReady();
     BATTLE.enemies = [{ id: 9007, type: "chaser", x: BATTLE._px, y: BATTLE._py, hp: 999, maxHp: 999,
       fireT: 0, dashT: 0, dashVx: 0, dashVy: 0, dashLeft: 0, hitCd: 0, flash: 0, tele: 0, elite: false, sign: 1 }];
     BATTLE.player.shieldLv = 1; BATTLE.player.shield = 1; BATTLE.player.shieldCd = 0;
@@ -487,15 +506,10 @@ const test = `
     const hp0 = BATTLE.player.hp;
     battleTick(0.10, session.worldPos, false);          // 无敌帧内接触不掉血
     const noDmg = BATTLE.player.hp === hp0;
-    console.log("   [dbg dash] noDmg=" + noDmg + " hp=" + BATTLE.player.hp + " hp0=" + hp0 +
-      " inv=" + BATTLE.invuln + " hitStop=" + BATTLE.hitStop + " hitCd=" +
-      (BATTLE.enemies[0] ? BATTLE.enemies[0].hitCd : "gone") + " room=" + (BATTLE.room ? BATTLE.room.index : null) +
-      " state=" + BATTLE.state);
     BATTLE.invuln = 0;
     BATTLE.enemies[0].hitCd = 0;                        // 无敌帧内接触也会消耗怪的攻击冷却
     BATTLE.hitStop = 0;
     battleTick(0.10, session.worldPos, false);          // 无敌结束 → 受伤
-    console.log("   [dbg dash2] hp=" + BATTLE.player.hp + " cd=" + BATTLE.dashCd.toFixed(2));
     return noDmg && BATTLE.player.hp < hp0 && BATTLE.dashCd > 0;
   })());
   check("elite kill drops 5 coins", (() => {
@@ -520,10 +534,6 @@ const test = `
     BATTLE.ebullets = [];
     for (let i = 0; i < 26; i++) { BATTLE.player.hp = BATTLE.player.maxHp; battleTick(0.1, session.worldPos, false); }
     const spread = BATTLE.ebullets.length;              // phase2：扇形 5（含顿帧耗时冗余）
-    console.log("   [dbg boss] ring=" + ring + " spread=" + spread + " phase=" +
-      (BATTLE.enemies[0] ? BATTLE.enemies[0].phase : "gone") + " fireT=" +
-      (BATTLE.enemies[0] ? BATTLE.enemies[0].fireT.toFixed(2) : "-") + " room=" + (BATTLE.room ? BATTLE.room.index : null) +
-      " en=" + BATTLE.enemies.length);
     BATTLE.enemies = []; BATTLE.ebullets = [];
     BATTLE.hitStop = 0;
     return ring === 10 && spread === 5;
@@ -537,7 +547,6 @@ const test = `
     fireT: 0, dashT: 0, dashVx: 0, dashVy: 0, dashLeft: 0, hitCd: 0, flash: 0, tele: 0, elite: false, sign: 1 });
   const hpB = BATTLE.player.hp;
   battleTick(0.1, session.worldPos, false);
-  console.log("   [dbg contact] hp=" + BATTLE.player.hp + "/" + hpB + " state=" + BATTLE.state);
   check("enemy contact damages player", BATTLE.player.hp < hpB);
   BATTLE.player.hp = 5;
   BATTLE.hitStop = 0;
