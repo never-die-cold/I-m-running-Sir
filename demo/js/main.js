@@ -126,6 +126,7 @@ function resetRun(){
   session.stamina=100;
   if(session.mode==="battle") battleReset(20260924, session);
   if(typeof Store!=="undefined") Store.write("devPanels", session.mode!=="battle"); /* 战斗默认收 GPS 面板 */
+  if(typeof maybeTutorialToast==="function") maybeTutorialToast();   /* 首战引导（永久一次） */
   session.startRun();
   boot.autopilot=false;
   cam.x=session.worldPos.x; cam.y=session.worldPos.y;
@@ -174,6 +175,9 @@ function init(){
   const fup=()=>{ BATTLE.firing=false; };
   fb.addEventListener("pointerup",fup); fb.addEventListener("pointercancel",fup); fb.addEventListener("pointerleave",fup);
   $("mbSkill").addEventListener("click",()=>battleNovaBurst());
+  $("deadEndless").addEventListener("click",()=>{
+    Sfx.play("buy"); hideResult(); battleEndless();
+  });
   const up=()=>{ keys.ShiftRightMobile=false; };
   sb.addEventListener("pointerup",up); sb.addEventListener("pointercancel",up); sb.addEventListener("pointerleave",up);
 

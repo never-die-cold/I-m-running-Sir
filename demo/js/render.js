@@ -420,6 +420,21 @@ function drawBattle(){
     ctx.fillStyle="#ff8a5a";
     ctx.beginPath(); ctx.arc(x,y,Math.max(2.4,3.6*cam.zoom),0,7); ctx.fill();
   }
+  /* BOSS 顶部大血条 */
+  const boss=BATTLE.enemies.find(e=>e.type==="boss");
+  if(boss){
+    const bw=Math.min(420,W*0.4), bx=W/2-bw/2, by=76;
+    ctx.save();
+    ctx.fillStyle="rgba(4,7,9,.75)";
+    ctx.fillRect(bx-4,by-4,bw+8,18);
+    ctx.strokeStyle="rgba(255,59,48,.85)"; ctx.lineWidth=1.5;
+    ctx.strokeRect(bx-4,by-4,bw+8,18);
+    ctx.fillStyle="#ff3b30";
+    ctx.fillRect(bx,by,bw*Math.max(0,boss.hp/boss.maxHp),10);
+    ctx.fillStyle="#ffd9d5"; ctx.font="bold 10px sans-serif"; ctx.textAlign="center"; ctx.textBaseline="middle";
+    ctx.fillText("BOSS  "+Math.ceil(boss.hp)+" / "+boss.maxHp, W/2, by+5);
+    ctx.restore();
+  }
   /* 玩家箭 */
   ctx.strokeStyle="#ffe98a"; ctx.lineWidth=Math.max(1.4,2.2*cam.zoom); ctx.lineCap="round";
   ctx.beginPath();

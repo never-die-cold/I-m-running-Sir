@@ -344,6 +344,22 @@ const test = `
     !BATTLE.enemies.some(e => e.type !== "wild"));
   check("victory rates 3 stars", Progress.rateRun(session, BATTLE) === 3);
   check("victory grants bonus coins", BATTLE.coins >= 50);
+
+  /* ---- 无尽模式：重刷全站，难度 +1 ---- */
+  check("endless mode respawns stations harder", (() => {
+    const ok = battleEndless() && BATTLE.state === "fighting" && BATTLE.difficulty === 1 &&
+      session.checkpoints.every(c => !c.cleared);
+    let scaled = false;
+    if (ok) {
+      const cpE = session.checkpoints[0];
+      session.worldPos = { x: cpE.localMeters.x, y: cpE.localMeters.y };
+      battleTick(0.05, session.worldPos, false);
+      scaled = BATTLE.enemies.some(e => e.type === "chaser" && e.maxHp === 33);   // 22×1.5
+    }
+    session.setMode("battle"); resetRun();
+    return ok && scaled && BATTLE.difficulty === 0;
+  })());
+  check("first battle sets tutorial flag", Store.read("tutorialDone", false) === true);
   /* 复位战斗状态供后续检查 */
   session.setMode("free"); resetRun();
   session.setMode("battle"); resetRun();

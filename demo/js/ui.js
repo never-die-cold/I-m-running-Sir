@@ -104,6 +104,16 @@ function refreshBattleOverlays(){
     if(!isResultVisible()) showResult("通 关 ！");
   }
 }
+
+/* 首次进入战斗的引导提示（永久一次） */
+function maybeTutorialToast(){
+  if(session.mode!=="battle") return;
+  if(typeof Store==="undefined"||Store.read("tutorialDone",false)) return;
+  Store.write("tutorialDone",true);
+  showToast("🕹 左摇杆 / WASD 移动");
+  showToast("🎯 右摇杆 / J / 普攻键 射击（移动中可射）");
+  showToast("💨 Shift / 冲刺键 翻滚无敌");
+}
 function _skillLvTag(id){
   const p=BATTLE.player;
   const cur={multi:p.arrows,pierce:p.pierce,ricochet:p.ricochet,nova:p.nova,
@@ -240,6 +250,7 @@ function showResult(title){
   }
   $("deadStats").innerHTML=rows.map((t,i)=>
     '<div class="lootRow" style="animation-delay:'+(i*0.16+0.15).toFixed(2)+'s">'+t+"</div>").join("");
+  $("deadEndless").style.display=(session.mode==="battle")?"":"none";
   $("deadOverlay").style.display="flex";
   boot.paused=true;
 }
@@ -306,6 +317,7 @@ function updateHud(){
   $("mbAuto").style.display=inBattle?"none":"";
   $("mbSkill").textContent=(bt.novaCdS||0)>0?Math.ceil(bt.novaCdS)+"s":"技能";
   $("mbSkill").classList.toggle("cooldown",(bt.novaCdS||0)>0);
+  maybeTutorialToast();
   /* GPS/JSON 开发面板：战斗模式默认收起，H 切换 */
   $("pRight").style.display=devPanelsVisible()?"":"none";
   $("pRight").style.opacity=inBattle?"0.85":"1";

@@ -20,6 +20,7 @@ const BATTLE = {
   invuln: 0, dashCd: 0,             // 翻滚无敌帧 / 冷却
   firing: false, aim: null,         // 主动射击：按住普攻/射击摇杆（aim={x,y} 为手动方向，null=自动索敌）
   novaCdS: 0,                       // 主动技能「环射」冷却
+  difficulty: 0, endless: false,    // 无尽模式：每轮清空后难度+1 重刷全站
   wave: 0,          // 当前站点编号（1 起），0=赶路中
   roomsTotal: 0,    // 站点总数
   room: null,       // 当前驻守的打卡点（清空前不再触发新房间）
@@ -81,6 +82,7 @@ function battleReset(seed, session){
   BATTLE.shake=0; BATTLE.hitStop=0; BATTLE.coins=0;
   BATTLE.dashT=0; BATTLE.dashVx=0; BATTLE.dashVy=0; BATTLE.invuln=0; BATTLE.dashCd=0;
   BATTLE.novaCdS=0;
+  BATTLE.difficulty=0; BATTLE.endless=false;
   BATTLE.wave=0; BATTLE.roomsTotal=0; BATTLE.room=null;
   BATTLE.kills=0; BATTLE.exp=0; BATTLE.level=1; BATTLE.expNext=10;
   BATTLE.state="fighting"; BATTLE.choices=[];
@@ -153,14 +155,19 @@ function battleSpawnRoom(cp){
     const t=ENEMY_TYPES[type];
     const p=ringPos();
     const elite=type!=="boss" && cp.index>=2 && BATTLE.rng.next()<0.18;
+    const df=1+0.5*(BATTLE.difficulty||0);          // 无尽难度：血量 +50%/轮
+    const sf=1+0.12*(BATTLE.difficulty||0);         // 无尽难度：速度 +12%/轮
     const mul=elite?1.8:1;
     BATTLE.enemies.push({ id:BATTLE._nextId++, type, x:p.x, y:p.y,
-      hp:Math.round(t.hp*mul), maxHp:Math.round(t.hp*mul),
+      hp:Math.round(t.hp*mul*df), maxHp:Math.round(t.hp*mul*df),
+      spd:t.speed*sf*(elite?0.9:1),
+      dashSpd:t.dashSpeed?t.dashSpeed*sf:0,
       fireT:t.fireInterval?BATTLE.rng.range(0.5,t.fireInterval):0,
       dashT:t.dashCd?BATTLE.rng.range(1,t.dashCd):0, dashVx:0, dashVy:0, dashLeft:0,
       hitCd:0, flash:0, tele:0, elite, sign:BATTLE.rng.next()<0.5?-1:1 });
   };
   const i=cp.index, isBossRoom=(i===BATTLE.roomsTotal-1);
+  if(isBossRoom && typeof showToast==="function") showToast("⚠ BOSS 来袭！");
   if(isBossRoom){ push("boss"); push("chaser"); push("chaser"); push("shooter"); push("charger"); }
   else {
     const ch=3+Math.ceil((i+1)*0.8), sh=i>=1?1+Math.floor((i+1)/3):0, cg=i>=2?1+(i>=4?1:0):0;
@@ -294,6 +301,24 @@ function battleNovaBurst(){
   BATTLE.fx.push({x:BATTLE._px,y:BATTLE._py,age:0,dur:0.5,r:40,color:"#3fd6ff"});
   BATTLE.shake=Math.min(1,(BATTLE.shake||0)+0.12);
   if(typeof Sfx!=="undefined") Sfx.play("nova");
+}
+
+/* 无尽模式：通关后重刷全站，难度+1（血 +50%/轮 速度 +12%/轮） */
+function battleEndless(){
+  if(BATTLE.state!=="victory") return false;
+  BATTLE.difficulty=(BATTLE.difficulty||0)+1;
+  BATTLE.endless=true; BATTLE.victory=false;
+  BATTLE.state="fighting"; BATTLE.room=null; BATTLE.wave=0;
+  BATTLE.novaCdS=0; BATTLE.fireCd=0; BATTLE.dashT=0;
+  if(BATTLE.session){
+    BATTLE.session.checkpoints.forEach(c=>c.cleared=false);
+    BATTLE.session.startRun();
+    battleSpawnSupplies(BATTLE.session);
+  }
+  const p=BATTLE.player;
+  p.hp=Math.max(p.hp,Math.round(p.maxHp*0.5));
+  if(typeof Progress!=="undefined"&&Progress.onToast) Progress.onToast("♾ 无尽难度 "+BATTLE.difficulty+" · 敌人强化","rec");
+  return true;
 }
 
 /* 特效/伤害数字老化 */
@@ -442,6 +467,7 @@ function battleTick(dt, playerPos, moving){
   /* 敌人行为 */
   for(const e of BATTLE.enemies){
     const t=ENEMY_TYPES[e.type];
+    const spd=e.spd||t.speed;
     e.flash=Math.max(0,e.flash-dt);
     /* 燃烧 DoT / 霜箭减速 */
     if((e.burnT||0)>0){
@@ -461,7 +487,7 @@ function battleTick(dt, playerPos, moving){
     }
     else if(e.type==="wild"){
       if(!e.aggro && d<60) e.aggro=true;                    /* 靠近才仇恨 */
-      if(e.aggro){ vx=dx/d*t.speed; vy=dy/d*t.speed; }
+      if(e.aggro){ vx=dx/d*spd; vy=dy/d*spd; }
       else {
         /* 游荡：周期性换漫游点（独立 rng 流） */
         e.wt=(e.wt===undefined?2:e.wt)-dt;
@@ -475,9 +501,9 @@ function battleTick(dt, playerPos, moving){
       }
     }
     else if(e.type==="shooter"){
-      if(d>85){ vx=dx/d*t.speed; vy=dy/d*t.speed; }
-      else if(d<55){ vx=-dx/d*t.speed; vy=-dy/d*t.speed; }
-      else { vx=-dy/d*t.speed*e.sign; vy=dx/d*t.speed*e.sign; }
+      if(d>85){ vx=dx/d*spd; vy=dy/d*spd; }
+      else if(d<55){ vx=-dx/d*spd; vy=-dy/d*spd; }
+      else { vx=-dy/d*spd*e.sign; vy=dx/d*spd*e.sign; }
       e.fireT-=dt;
       if(e.fireT<=0 && d<130){
         e.fireT=t.fireInterval;
@@ -496,13 +522,13 @@ function battleTick(dt, playerPos, moving){
         if(e.dashT<=0 && d<85){
           e.dashT=t.dashCd+BATTLE.rng.range(0,1);
           e.tele=0.55;                                       /* 预警 0.55s，方向锁定可躲避 */
-          e.dashVx=dx/d*t.dashSpeed; e.dashVy=dy/d*t.dashSpeed;
+          e.dashVx=dx/d*(e.dashSpd||t.dashSpeed); e.dashVy=dy/d*(e.dashSpd||t.dashSpeed);
         }
-        else { vx=dx/d*t.speed; vy=dy/d*t.speed; }
+        else { vx=dx/d*spd; vy=dy/d*spd; }
       }
     }
     else if(e.type==="boss"){
-      vx=dx/d*t.speed; vy=dy/d*t.speed;
+      vx=dx/d*spd; vy=dy/d*spd;
       e.fireT-=dt;
       if(e.fireT<=0){
         e.phase=(e.phase||0)+1;

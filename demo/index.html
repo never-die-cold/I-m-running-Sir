@@ -131,7 +131,7 @@
   @media (max-width: 700px), (max-height: 520px){
     #pRight { display:none; }
     #pLeft { width:178px; left:8px; top:8px; }
-    #pTop { top:8px; width:200px; }
+    #pTop { top:8px; right:8px; left:auto; transform:none; width:190px; }
     #pBottom { bottom:8px; max-width:calc(100% - 16px); }
     #hint { font-size:10px; }
     .kbd { padding:1px 4px; font-size:9.5px; }
@@ -229,6 +229,7 @@
     <div id="deadStats"></div>
     <p>
       <button class="chip" id="deadRetry">再来一局 (T)</button>
+      <button class="chip" id="deadEndless" style="display:none; border-color:#c9b3e6; color:#c9b3e6;">♾ 无尽模式</button>
       <button class="chip" id="deadMenu">返回菜单</button>
     </p>
   </div>
